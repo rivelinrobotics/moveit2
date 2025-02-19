@@ -1095,7 +1095,7 @@ void PlanningSceneMonitor::startSceneMonitor(const std::string& scene_topic)
   if (!scene_topic.empty())
   {
     planning_scene_subscriber_ = pnode_->create_subscription<moveit_msgs::msg::PlanningScene>(
-        scene_topic, rclcpp::SystemDefaultsQoS(), [this](const moveit_msgs::msg::PlanningScene::ConstSharedPtr& scene) {
+        scene_topic, rmw_qos_profile_default, [this](const moveit_msgs::msg::PlanningScene::ConstSharedPtr& scene) {
           return newPlanningSceneCallback(scene);
         });
     RCLCPP_INFO(LOGGER, "Listening to '%s'", planning_scene_subscriber_->get_topic_name());
@@ -1183,7 +1183,7 @@ void PlanningSceneMonitor::startWorldGeometryMonitor(const std::string& collisio
   if (!collision_objects_topic.empty())
   {
     collision_object_subscriber_ = pnode_->create_subscription<moveit_msgs::msg::CollisionObject>(
-        collision_objects_topic, rclcpp::SystemDefaultsQoS(),
+        collision_objects_topic, rmw_qos_profile_default,
         [this](const moveit_msgs::msg::CollisionObject::ConstSharedPtr& obj) { return collisionObjectCallback(obj); });
     RCLCPP_INFO(LOGGER, "Listening to '%s'", collision_objects_topic.c_str());
   }
@@ -1191,7 +1191,7 @@ void PlanningSceneMonitor::startWorldGeometryMonitor(const std::string& collisio
   if (!planning_scene_world_topic.empty())
   {
     planning_scene_world_subscriber_ = pnode_->create_subscription<moveit_msgs::msg::PlanningSceneWorld>(
-        planning_scene_world_topic, rclcpp::SystemDefaultsQoS(),
+        planning_scene_world_topic, rmw_qos_profile_default,
         [this](const moveit_msgs::msg::PlanningSceneWorld::ConstSharedPtr& world) {
           return newPlanningSceneWorldCallback(world);
         });
@@ -1263,7 +1263,7 @@ void PlanningSceneMonitor::startStateMonitor(const std::string& joint_states_top
     {
       // using regular message filter as there's no header
       attached_collision_object_subscriber_ = pnode_->create_subscription<moveit_msgs::msg::AttachedCollisionObject>(
-          attached_objects_topic, rclcpp::SystemDefaultsQoS(),
+          attached_objects_topic, rmw_qos_profile_default,
           [this](const moveit_msgs::msg::AttachedCollisionObject::ConstSharedPtr& obj) {
             return attachObjectCallback(obj);
           });
