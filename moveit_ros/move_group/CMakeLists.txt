@@ -42,6 +42,7 @@ add_library(moveit_move_group_capabilities_base SHARED
 
 add_library(moveit_move_group_default_capabilities SHARED
   src/default_capabilities/move_action_capability.cpp
+  src/default_capabilities/multi_state_validation_service_capability.cpp
   src/default_capabilities/plan_service_capability.cpp
   src/default_capabilities/execute_trajectory_action_capability.cpp
   src/default_capabilities/query_planners_service_capability.cpp
