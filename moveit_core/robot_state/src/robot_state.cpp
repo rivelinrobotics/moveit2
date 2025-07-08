@@ -1602,6 +1602,12 @@ bool RobotState::setFromIK(const JointModelGroup* jmg, const EigenSTL::vector_Is
     return false;
   }
 
+  for (unsigned i = 0; i < tips_in.size(); ++i)
+  {
+    RCLCPP_WARN_STREAM(LOGGER, "Tip: " << tips_in[i]);
+    RCLCPP_WARN_STREAM(LOGGER, "Pose:\n" << poses_in[i].matrix());
+  }
+
   // Load solver
   const kinematics::KinematicsBaseConstPtr& solver = jmg->getSolverInstance();
 
@@ -1714,6 +1720,15 @@ bool RobotState::setFromIK(const JointModelGroup* jmg, const EigenSTL::vector_Is
           // transform goal pose as target for solver_tip_frame (instead of pose_frame)
           pose = pose * pose_parent_to_frame.inverse() * tip_parent_to_tip;
           found_valid_frame = true;
+          RCLCPP_WARN_STREAM(LOGGER, "Pose frame: " << pose_frame);
+          RCLCPP_WARN_STREAM(LOGGER, "Solver tip frame: " << solver_tip_frame);
+          RCLCPP_WARN_STREAM(LOGGER, "Parent frame: " << pose_parent->getName());
+          RCLCPP_WARN_STREAM(LOGGER, "Parent from pose frame:\n" << pose_parent_to_frame.matrix());
+          RCLCPP_WARN_STREAM(LOGGER, "Parent from solver tip frame:\n" << tip_parent_to_tip.matrix());
+          RCLCPP_WARN_STREAM(LOGGER, "Solver tip from pose frame:\n" << (tip_parent_to_tip.inverse() * pose).matrix());
+          RCLCPP_WARN_STREAM(LOGGER, "Pose frame from solver tip:\n"
+                                         << (pose_parent_to_frame.inverse() * tip_parent_to_tip).matrix());
+          RCLCPP_WARN_STREAM(LOGGER, "Pose to solver tip:\n" << pose.matrix());
           break;
         }
       }
@@ -1722,7 +1737,7 @@ bool RobotState::setFromIK(const JointModelGroup* jmg, const EigenSTL::vector_Is
         found_valid_frame = true;
         break;
       }  // end if pose_frame
-    }    // end for solver_tip_frames
+    }  // end for solver_tip_frames
 
     // Make sure one of the tip frames worked
     if (!found_valid_frame)
