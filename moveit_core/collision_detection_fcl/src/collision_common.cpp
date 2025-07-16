@@ -391,40 +391,28 @@ struct FCLShapeCache
   using ShapeKey = shapes::ShapeConstWeakPtr;
   using ShapeMap = std::map<ShapeKey, FCLGeometryConstPtr, std::owner_less<ShapeKey>>;
 
-  FCLShapeCache() : clean_count_(0)
+  FCLShapeCache()
   {
   }
 
-  void bumpUseCount(bool force = false)
+  void cleanExpiredPtrs()
   {
-    clean_count_++;
-
     // clean-up for cache (we don't want to keep infinitely large number of weak ptrs stored)
-    if (clean_count_ > MAX_CLEAN_COUNT || force)
+    for (auto it = map_.begin(); it != map_.end();)
     {
-      clean_count_ = 0;
-      for (auto it = map_.begin(); it != map_.end();)
-      {
-        auto nit = it;
-        ++nit;
-        if (it->first.expired())
-          map_.erase(it);
-        it = nit;
-      }
-      //      RCLCPP_DEBUG(LOGGER, "Cleaning up cache for FCL objects that correspond to static
-      //      shapes. Cache size
-      //      reduced from %u
-      //      to %u", from, (unsigned int)map_.size());
+      auto nit = it;
+      ++nit;
+      if (it->first.expired())
+        map_.erase(it);
+      it = nit;
     }
+    //      RCLCPP_DEBUG(LOGGER, "Cleaning up cache for FCL objects that correspond to static
+    //      shapes. Cache size
+    //      reduced from %u
+    //      to %u", from, (unsigned int)map_.size());
   }
-
-  static const unsigned int MAX_CLEAN_COUNT = 100;  // every this many uses of the cache, a cleaning operation is
-                                                    // executed (this is only removal of expired entries)
   /** \brief Map of weak pointers to the FCLGeometry. */
   ShapeMap map_;
-
-  /** \brief Counts cache usage and triggers clearing of cache when \m MAX_CLEAN_COUNT is exceeded. */
-  unsigned int clean_count_;
 };
 
 bool distanceCallback(fcl::CollisionObjectd* o1, fcl::CollisionObjectd* o2, void* data, double& /*min_dist*/)
