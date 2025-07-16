@@ -929,11 +929,11 @@ void cleanCollisionGeometryCache()
 {
   FCLShapeCache& cache1 = GetShapeCache<fcl::OBBRSSd, World::Object>();
   {
-    cache1.cleanExpiredPtrs(true);
+    cache1.cleanExpiredPtrs();
   }
   FCLShapeCache& cache2 = GetShapeCache<fcl::OBBRSSd, moveit::core::AttachedBody>();
   {
-    cache2.cleanExpiredPtrs(true);
+    cache2.cleanExpiredPtrs();
   }
 }
 
