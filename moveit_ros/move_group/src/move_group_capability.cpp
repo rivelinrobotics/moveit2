@@ -63,7 +63,7 @@ void move_group::MoveGroupCapability::convertToMsg(const std::vector<plan_execut
       {
         if (first && !trajectory[i].trajectory_->empty())
         {
-          moveit::core::robotStateToRobotStateMsg(trajectory[i].trajectory_->getFirstWayPoint(), first_state_msg);
+          //moveit::core::robotStateToRobotStateMsg(trajectory[i].trajectory_->getFirstWayPoint(), first_state_msg);
           first = false;
         }
         trajectory[i].trajectory_->getRobotTrajectoryMsg(trajectory_msg[i]);
@@ -78,7 +78,7 @@ void move_group::MoveGroupCapability::convertToMsg(const robot_trajectory::Robot
 {
   if (trajectory && !trajectory->empty())
   {
-    moveit::core::robotStateToRobotStateMsg(trajectory->getFirstWayPoint(), first_state_msg);
+    //moveit::core::robotStateToRobotStateMsg(trajectory->getFirstWayPoint(), first_state_msg);
     trajectory->getRobotTrajectoryMsg(trajectory_msg);
   }
 }
