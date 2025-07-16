@@ -753,7 +753,7 @@ FCLGeometryConstPtr createCollisionGeometry(const shapes::ShapeConstPtr& shape, 
 
         // add to the new cache
         cache.map_[wptr] = obj_cache;
-        cache.bumpUseCount();
+        cache.cleanExpiredPtrs();
         return obj_cache;
       }
     }
@@ -788,7 +788,7 @@ FCLGeometryConstPtr createCollisionGeometry(const shapes::ShapeConstPtr& shape, 
 
           // add to the new cache
           cache.map_[wptr] = obj_cache;
-          cache.bumpUseCount();
+          cache.cleanExpiredPtrs();
           return obj_cache;
         }
       }
@@ -867,7 +867,7 @@ FCLGeometryConstPtr createCollisionGeometry(const shapes::ShapeConstPtr& shape, 
     cg_g->computeLocalAABB();
     FCLGeometryConstPtr res = std::make_shared<const FCLGeometry>(cg_g, data, shape_index);
     cache.map_[wptr] = res;
-    cache.bumpUseCount();
+    cache.cleanExpiredPtrs();
     return res;
   }
   return FCLGeometryConstPtr();
@@ -929,11 +929,11 @@ void cleanCollisionGeometryCache()
 {
   FCLShapeCache& cache1 = GetShapeCache<fcl::OBBRSSd, World::Object>();
   {
-    cache1.bumpUseCount(true);
+    cache1.cleanExpiredPtrs(true);
   }
   FCLShapeCache& cache2 = GetShapeCache<fcl::OBBRSSd, moveit::core::AttachedBody>();
   {
-    cache2.bumpUseCount(true);
+    cache2.cleanExpiredPtrs(true);
   }
 }
 
