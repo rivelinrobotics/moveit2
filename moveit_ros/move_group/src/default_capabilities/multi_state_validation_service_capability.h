@@ -1,15 +1,13 @@
 #pragma once
 
-#include <moveit/move_group/move_group_capability.h>
-#include <moveit_msgs/srv/get_multi_state_validity.hpp>
+#include "state_validation_service_capability.h"
+#include <moveit_msgs/srv/get_multi_state_validity.h>
 
 namespace move_group
 {
-class MoveGroupMultiStateValidationService : public MoveGroupCapability
+class MoveGroupMultiStateValidationService : public MoveGroupStateValidationService
 {
 public:
-MoveGroupMultiStateValidationService();
-
   void initialize() override;
 
 private:
