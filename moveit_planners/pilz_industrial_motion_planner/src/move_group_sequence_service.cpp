@@ -36,6 +36,8 @@
 
 // Modified by Pilz GmbH & Co. KG
 
+#include <malloc.h>
+
 #include <pilz_industrial_motion_planner/move_group_sequence_service.hpp>
 
 #include <pilz_industrial_motion_planner/capability_names.hpp>
@@ -126,6 +128,10 @@ bool MoveGroupSequenceService::plan(const moveit_msgs::srv::GetMotionSequence::R
   }
   res->response.error_code.val = moveit_msgs::msg::MoveItErrorCodes::SUCCESS;
   res->response.planning_time = (context_->moveit_cpp_->getNode()->now() - planning_start).seconds();
+
+  // Prevent glibc inflating the heap resident size indefinitely.
+  malloc_trim(0);
+
   return true;
 }
 
