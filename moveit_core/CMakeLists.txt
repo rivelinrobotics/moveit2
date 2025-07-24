@@ -111,6 +111,7 @@ install(
   RUNTIME DESTINATION bin)
 
 ament_export_targets(moveit_coreTargets HAS_LIBRARY_TARGET)
+ament_export_targets(moveit_core_PluginTargets HAS_LIBRARY_TARGET)
 ament_export_dependencies(
   angles
   Bullet

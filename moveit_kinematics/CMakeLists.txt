@@ -83,6 +83,7 @@ install(
   DESTINATION include/moveit_kinematics)
 
 ament_export_targets(${PROJECT_NAME}Targets HAS_LIBRARY_TARGET)
+ament_export_targets(${PROJECT_NAME}PluginTargets HAS_LIBRARY_TARGET)
 ament_export_dependencies(${THIS_PACKAGE_INCLUDE_DEPENDS})
 
 ament_package(CONFIG_EXTRAS ConfigExtras.cmake)
