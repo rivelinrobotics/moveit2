@@ -331,7 +331,7 @@ void PlanningScene::clearDiffs()
   scene_transforms_.reset();
   robot_state_.reset();
   acm_.reset();
-  object_colors_.reset();
+  //object_colors_.reset();
   object_types_.reset();
 }
 
@@ -2190,8 +2190,8 @@ void PlanningScene::setObjectColor(const std::string& object_id, const std_msgs:
 
 void PlanningScene::removeObjectColor(const std::string& object_id)
 {
-  if (object_colors_)
-    object_colors_->erase(object_id);
+  //if (object_colors_)
+  //  object_colors_->erase(object_id);
 }
 
 bool PlanningScene::isStateColliding(const moveit_msgs::msg::RobotState& state, const std::string& group,
