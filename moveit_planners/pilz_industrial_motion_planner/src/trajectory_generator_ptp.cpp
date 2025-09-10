@@ -254,7 +254,7 @@ void TrajectoryGeneratorPTP::extractMotionPlanInfo(const planning_scene::Plannin
 
     // check goal pose ik before Cartesian motion plan start
     if (!computePoseIK(scene, info.group_name, info.link_name, info.goal_pose, frame_id, info.start_joint_position,
-                       info.goal_joint_position))
+                       info.goal_joint_position, false))
     {
       std::ostringstream os;
       os << "Failed to compute inverse kinematics for link: " << info.link_name << " of goal pose";
