@@ -35,6 +35,7 @@
 /* Author: Ioan Sucan */
 
 #include <algorithm>
+#include <iostream>
 
 #include <geometric_shapes/solid_primitive_dims.h>
 #include <moveit/kinematic_constraints/utils.hpp>
@@ -153,6 +154,9 @@ moveit_msgs::msg::Constraints constructGoalConstraints(const moveit::core::Robot
                                                        const moveit::core::JointModelGroup* jmg, double tolerance_below,
                                                        double tolerance_above)
 {
+  std::cout << __PRETTY_FUNCTION__ << std::endl;
+  std::cout << "Tolerance below: " << tolerance_below << std::endl;
+  std::cout << "Tolerance above: " << tolerance_above << std::endl;
   moveit_msgs::msg::Constraints goal;
   std::vector<double> vals;
   state.copyJointGroupPositions(jmg, vals);
@@ -195,6 +199,9 @@ moveit_msgs::msg::Constraints constructGoalConstraints(const std::string& link_n
                                                        const geometry_msgs::msg::PoseStamped& pose,
                                                        double tolerance_pos, double tolerance_angle)
 {
+  std::cout << __PRETTY_FUNCTION__ << std::endl;
+  std::cout << "Tolerance pos: " << tolerance_angle << std::endl;
+  std::cout << "Tolerance angle: " << tolerance_pos << std::endl;
   moveit_msgs::msg::Constraints goal;
 
   goal.position_constraints.resize(1);
@@ -234,6 +241,7 @@ moveit_msgs::msg::Constraints constructGoalConstraints(const std::string& link_n
                                                        const std::vector<double>& tolerance_pos,
                                                        const std::vector<double>& tolerance_angle)
 {
+  std::cout << __PRETTY_FUNCTION__ << std::endl;
   moveit_msgs::msg::Constraints goal = constructGoalConstraints(link_name, pose);
   if (tolerance_pos.size() == 3)
   {
@@ -276,6 +284,8 @@ moveit_msgs::msg::Constraints constructGoalConstraints(const std::string& link_n
                                                        const geometry_msgs::msg::QuaternionStamped& quat,
                                                        double tolerance)
 {
+  std::cout << __PRETTY_FUNCTION__ << std::endl;
+  std::cout << "Tolerance: " << tolerance << std::endl;
   moveit_msgs::msg::Constraints goal;
   goal.orientation_constraints.resize(1);
   moveit_msgs::msg::OrientationConstraint& ocm = goal.orientation_constraints[0];
@@ -317,6 +327,7 @@ moveit_msgs::msg::Constraints constructGoalConstraints(const std::string& link_n
   p.x = 0;
   p.y = 0;
   p.z = 0;
+  std::cout << __PRETTY_FUNCTION__ << std::endl;
   return constructGoalConstraints(link_name, p, goal_point, tolerance);
 }
 
@@ -347,6 +358,8 @@ moveit_msgs::msg::Constraints constructGoalConstraints(const std::string& link_n
                                                        const geometry_msgs::msg::PointStamped& goal_point,
                                                        double tolerance)
 {
+  std::cout << __PRETTY_FUNCTION__ << std::endl;
+  std::cout << "Tolerance: " << tolerance << std::endl;
   moveit_msgs::msg::Constraints goal;
   goal.position_constraints.resize(1);
   moveit_msgs::msg::PositionConstraint& pcm = goal.position_constraints[0];

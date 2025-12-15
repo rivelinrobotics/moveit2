@@ -128,7 +128,7 @@ bool updateJointConstraints(moveit_msgs::msg::Constraints& constraints, const mo
  */
 moveit_msgs::msg::Constraints constructGoalConstraints(const std::string& link_name,
                                                        const geometry_msgs::msg::PoseStamped& pose,
-                                                       double tolerance_pos = 1e-3, double tolerance_angle = 1e-2);
+                                                       double tolerance_pos = 1e-6, double tolerance_angle = 1e-5);
 
 /**
  * \brief Generates a constraint message intended to be used as a goal
@@ -175,7 +175,7 @@ bool updatePoseConstraint(moveit_msgs::msg::Constraints& constraints, const std:
  */
 moveit_msgs::msg::Constraints constructGoalConstraints(const std::string& link_name,
                                                        const geometry_msgs::msg::QuaternionStamped& quat,
-                                                       double tolerance = 1e-2);
+                                                       double tolerance = 1e-5);
 
 /**
  * \brief Update an orientation constraint for one link with a new quaternion
@@ -205,7 +205,7 @@ bool updateOrientationConstraint(moveit_msgs::msg::Constraints& constraints, con
 moveit_msgs::msg::Constraints constructGoalConstraints(const std::string& link_name,
                                                        const geometry_msgs::msg::Point& reference_point,
                                                        const geometry_msgs::msg::PointStamped& goal_point,
-                                                       double tolerance = 1e-3);
+                                                       double tolerance = 1e-6);
 
 /**
  * \brief Generates a constraint message intended to be used as a goal
@@ -221,7 +221,7 @@ moveit_msgs::msg::Constraints constructGoalConstraints(const std::string& link_n
  */
 moveit_msgs::msg::Constraints constructGoalConstraints(const std::string& link_name,
                                                        const geometry_msgs::msg::PointStamped& goal_point,
-                                                       double tolerance = 1e-3);
+                                                       double tolerance = 1e-6);
 
 /**
  * \brief Update a position constraint for one link with a new position
