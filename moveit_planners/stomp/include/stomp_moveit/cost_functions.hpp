@@ -56,8 +56,8 @@ namespace costs
 {
 
 // Interpolation step size for collision checking (joint space, L2 norm)
-constexpr double COL_CHECK_DISTANCE = 1e-6;
-constexpr double CONSTRAINT_CHECK_DISTANCE = 1e-6;
+constexpr double COL_CHECK_DISTANCE = 0.05;
+constexpr double CONSTRAINT_CHECK_DISTANCE = 0.05;
 
 /**
  * Creates a cost function from a robot state validation function.
