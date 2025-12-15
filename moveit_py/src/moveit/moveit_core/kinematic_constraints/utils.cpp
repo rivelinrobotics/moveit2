@@ -39,8 +39,6 @@
 #include <moveit_py/moveit_py_utils/ros_msg_typecasters.hpp>
 #include <moveit/kinematic_constraints/utils.hpp>
 
-#include <iostream>
-
 namespace moveit_py
 {
 namespace bind_kinematic_constraints
@@ -125,7 +123,6 @@ moveit_msgs::msg::Constraints constructJointConstraint(moveit::core::RobotState&
                                                        moveit::core::JointModelGroup* joint_model_group,
                                                        double tolerance)
 {
-  std::cout << __PRETTY_FUNCTION__ << std::endl;
   // generate joint constraint message
   moveit_msgs::msg::Constraints joint_constraints =
       kinematic_constraints::constructGoalConstraints(robot_state, joint_model_group, tolerance);
@@ -152,7 +149,7 @@ void initKinematicConstraints(py::module& m)
                             py::arg("cartesian_position_tolerance") = nullptr, py::arg("orientation") = nullptr,
                             py::arg("orientation_tolerance") = nullptr, "Construct a link constraint message");
   kinematic_constraints.def("construct_joint_constraint", &constructJointConstraint, py::arg("robot_state"),
-                            py::arg("joint_model_group"), py::arg("tolerance") = 1e-4,
+                            py::arg("joint_model_group"), py::arg("tolerance") = 0.01,
                             "Construct a joint constraint message");
   kinematic_constraints.def("construct_constraints_from_node", &constructConstraintsFromNode, py::arg("node_name"),
                             py::arg("ns"), "Construct a constraint message from a node");

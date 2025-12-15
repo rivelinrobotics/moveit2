@@ -35,7 +35,6 @@
 /* Author: Ioan Sucan */
 
 #include <algorithm>
-#include <iostream>
 
 #include <geometric_shapes/solid_primitive_dims.h>
 #include <moveit/kinematic_constraints/utils.hpp>
@@ -154,9 +153,6 @@ moveit_msgs::msg::Constraints constructGoalConstraints(const moveit::core::Robot
                                                        const moveit::core::JointModelGroup* jmg, double tolerance_below,
                                                        double tolerance_above)
 {
-  std::cout << __PRETTY_FUNCTION__ << std::endl;
-  std::cout << "Tolerance abv: " << tolerance_above << std::endl;
-  std::cout << "Tolerance blw: " << tolerance_below << std::endl;
   moveit_msgs::msg::Constraints goal;
   std::vector<double> vals;
   state.copyJointGroupPositions(jmg, vals);
