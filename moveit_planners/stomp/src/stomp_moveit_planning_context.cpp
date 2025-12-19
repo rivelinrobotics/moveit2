@@ -156,7 +156,12 @@ stomp::TaskPtr createStompTask(const stomp::StompConfiguration& config, StompPla
   const auto& req = context.getMotionPlanRequest();
   kinematic_constraints::KinematicConstraintSet constraints(planning_scene->getRobotModel());
   constraints.add(req.path_constraints, planning_scene->getTransforms());
-  constraints.add(req.goal_constraints, planning_scene->getTransforms());
+  // Copied from ModelBasedPlanningContext::setGoalConstraints
+  for (const moveit_msgs::msg::Constraints& goal_constraint : req.goal_constraints)
+  {
+    moveit_msgs::msg::Constraints merged_goal_constraint = kinematic_constraints::mergeConstraints(goal_constraint, req.path_constraints);
+    constraints.add(merged_goal_constraint, planning_scene->getTransforms());
+  }
 
   // Create callback functions for STOMP task
   // Cost, noise and filter functions are provided for planning.
