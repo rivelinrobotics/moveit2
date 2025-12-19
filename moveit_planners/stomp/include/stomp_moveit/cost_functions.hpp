@@ -47,6 +47,8 @@
 #include <stomp_moveit/stomp_moveit_task.hpp>
 #include <stomp_moveit/conversion_functions.hpp>
 
+#include <iostream>
+
 namespace stomp_moveit
 {
 // Validates a given state and produces a scalar cost penalty - example use cases are collision or constraint checking
@@ -243,6 +245,8 @@ CostFn getConstraintsCostFunction(const std::shared_ptr<const planning_scene::Pl
     setJointPositions(positions, joints, state);
     state.update();
 
+    // TODO: is it throwing away the first part of ConstraintEvaluationResult??
+    std::cout << "constraint validator: calling decide" << std::endl;
     return constraints.decide(state).distance * cost_scale;
   };
 

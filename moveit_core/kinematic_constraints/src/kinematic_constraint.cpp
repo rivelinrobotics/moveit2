@@ -314,7 +314,8 @@ ConstraintEvaluationResult JointConstraint::decide(const moveit::core::RobotStat
   // check bounds
   bool result = dif <= (joint_tolerance_above_ + 2.0 * std::numeric_limits<double>::epsilon()) &&
                 dif >= (-joint_tolerance_below_ - 2.0 * std::numeric_limits<double>::epsilon());
-  if (verbose)
+  // TODO: debug here
+  if (true || verbose)
   {
     RCLCPP_INFO(getLogger(),
                 "Constraint %s:: Joint name: '%s', actual value: %f, desired value: %f, "
