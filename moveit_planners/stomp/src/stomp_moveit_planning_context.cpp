@@ -52,6 +52,7 @@
 #include <moveit/constraint_samplers/constraint_sampler_manager.hpp>
 #include <moveit/robot_state/conversions.hpp>
 #include <moveit/utils/logger.hpp>
+#include <moveit/kinematic_constraints/utils.hpp>
 
 #include <iostream>
 
@@ -156,7 +157,6 @@ stomp::TaskPtr createStompTask(const stomp::StompConfiguration& config, StompPla
   const auto& req = context.getMotionPlanRequest();
   kinematic_constraints::KinematicConstraintSet constraints(planning_scene->getRobotModel());
   constraints.add(req.path_constraints, planning_scene->getTransforms());
-  // Copied from ModelBasedPlanningContext::setGoalConstraints
   for (const moveit_msgs::msg::Constraints& goal_constraint : req.goal_constraints)
   {
     moveit_msgs::msg::Constraints merged_goal_constraint = kinematic_constraints::mergeConstraints(goal_constraint, req.path_constraints);
