@@ -156,6 +156,7 @@ stomp::TaskPtr createStompTask(const stomp::StompConfiguration& config, StompPla
   const auto& req = context.getMotionPlanRequest();
   kinematic_constraints::KinematicConstraintSet constraints(planning_scene->getRobotModel());
   constraints.add(req.path_constraints, planning_scene->getTransforms());
+  constraints.add(req.goal_constraints, planning_scene->getTransforms());
 
   // Create callback functions for STOMP task
   // Cost, noise and filter functions are provided for planning.
@@ -165,7 +166,7 @@ stomp::TaskPtr createStompTask(const stomp::StompConfiguration& config, StompPla
   if (!constraints.empty())
   {
     RCLCPP_INFO(getLogger(), "constraints not empty");
-    std::cout << "constraints not empty" << std::endl;
+    std::cout << "cout: constraints not empty" << std::endl;
     cost_fn = costs::sum({ costs::getCollisionCostFunction(planning_scene, group, 1.0 /* collision penalty */),
                            costs::getConstraintsCostFunction(planning_scene, group, constraints.getAllConstraints(),
                                                              1.0 /* constraint penalty */) });
@@ -173,7 +174,7 @@ stomp::TaskPtr createStompTask(const stomp::StompConfiguration& config, StompPla
   else
   {
     RCLCPP_INFO(getLogger(), "constraints empty!");
-    std::cout << "constraints empty!" << std::endl;
+    std::cout << "cout: constraints empty!" << std::endl;
     cost_fn = costs::getCollisionCostFunction(planning_scene, group, 1.0 /* collision penalty */);
   }
 
@@ -221,7 +222,7 @@ StompPlanningContext::StompPlanningContext(const std::string& name, const std::s
 void StompPlanningContext::solve(planning_interface::MotionPlanResponse& res)
 {
   RCLCPP_INFO(getLogger(), "Solving with stomp");
-  std::cout << "Solving with stomp" << std::endl;
+  std::cout << "cout: Solving with stomp" << std::endl;
 
   // Start time
   auto time_start = std::chrono::steady_clock::now();
