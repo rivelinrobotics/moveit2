@@ -170,16 +170,12 @@ stomp::TaskPtr createStompTask(const stomp::StompConfiguration& config, StompPla
   CostFn cost_fn;
   if (!constraints.empty())
   {
-    RCLCPP_INFO(getLogger(), "constraints not empty");
-    std::cout << "cout: constraints not empty" << std::endl;
     cost_fn = costs::sum({ costs::getCollisionCostFunction(planning_scene, group, 1.0 /* collision penalty */),
                            costs::getConstraintsCostFunction(planning_scene, group, constraints.getAllConstraints(),
                                                              1.0 /* constraint penalty */) });
   }
   else
   {
-    RCLCPP_INFO(getLogger(), "constraints empty!");
-    std::cout << "cout: constraints empty!" << std::endl;
     cost_fn = costs::getCollisionCostFunction(planning_scene, group, 1.0 /* collision penalty */);
   }
 
@@ -226,7 +222,6 @@ StompPlanningContext::StompPlanningContext(const std::string& name, const std::s
 
 void StompPlanningContext::solve(planning_interface::MotionPlanResponse& res)
 {
-  RCLCPP_INFO(getLogger(), "Solving with stomp");
   std::cout << "cout: Solving with stomp" << std::endl;
 
   // Start time

@@ -54,8 +54,6 @@
 #include <rclcpp/clock.hpp>
 #include <rclcpp/duration.hpp>
 
-#include <iostream>
-
 namespace kinematic_constraints
 {
 namespace
@@ -317,14 +315,13 @@ ConstraintEvaluationResult JointConstraint::decide(const moveit::core::RobotStat
   bool result = dif <= (joint_tolerance_above_ + 2.0 * std::numeric_limits<double>::epsilon()) &&
                 dif >= (-joint_tolerance_below_ - 2.0 * std::numeric_limits<double>::epsilon());
   // TODO: debug here
-  if (true || verbose)
+  if (verbose)
   {
     RCLCPP_INFO(getLogger(),
                 "Constraint %s:: Joint name: '%s', actual value: %f, desired value: %f, "
                 "tolerance_above: %f, tolerance_below: %f",
                 result ? "satisfied" : "violated", joint_variable_name_.c_str(), current_joint_position,
                 joint_position_, joint_tolerance_above_, joint_tolerance_below_);
-    std::cout << "result: " << result << " joint: " << joint_variable_name_ << " actual: " << current_joint_position << " desired: " << joint_position_ << "tolerance above: " << joint_tolerance_above_ << " tolerance below: " << joint_tolerance_below_ << "\n";
   }
   return ConstraintEvaluationResult(result, constraint_weight_ * fabs(dif));
 }
