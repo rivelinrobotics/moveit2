@@ -323,6 +323,9 @@ ConstraintEvaluationResult JointConstraint::decide(const moveit::core::RobotStat
                 result ? "satisfied" : "violated", joint_variable_name_.c_str(), current_joint_position,
                 joint_position_, joint_tolerance_above_, joint_tolerance_below_);
   }
+  std::cout << "result: " << result << " joint: " << joint_variable_name_ << "\n actual: " << current_joint_position
+      << ", desired: " << joint_position_ << ", diff: " << diff << "\n tolerance above: " << joint_tolerance_above_
+      << ", tolerance below: " << joint_tolerance_below_ << "\n";
   return ConstraintEvaluationResult(result, constraint_weight_ * fabs(dif));
 }
 
