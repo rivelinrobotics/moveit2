@@ -2,6 +2,11 @@
 Changelog for package moveit_setup_srdf_plugins
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+2.12.4 (2026-02-10)
+-------------------
+Bump version number for compatibility with binary packages
+
+
 2.12.3 (2025-04-15)
 -------------------
 

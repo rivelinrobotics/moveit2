@@ -2,6 +2,10 @@
 Changelog for package moveit_resources_prbt_pg70_support
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+2.12.4 (2026-02-10)
+-------------------
+Bump version number for compatibility with binary packages
+
 2.12.3 (2025-04-15)
 -------------------
 

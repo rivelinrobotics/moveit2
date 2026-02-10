@@ -2,6 +2,10 @@
 Changelog for package moveit_planners_stomp
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+2.12.4 (2026-02-10)
+-------------------
+Bump version number for compatibility with binary packages
+
 2.12.3 (2025-04-15)
 -------------------
 * Add `stomp` target link to `moveit_planners_stomp` tests (`#3437 <https://github.com/ros-planning/moveit2/issues/3437>`_) (`#3438 <https://github.com/ros-planning/moveit2/issues/3438>`_)

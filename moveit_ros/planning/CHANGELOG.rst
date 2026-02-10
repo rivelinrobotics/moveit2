@@ -2,6 +2,10 @@
 Changelog for package moveit_ros_planning
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+2.12.4 (2026-02-10)
+-------------------
+Bump version number for compatibility with binary packages
+
 2.12.3 (2025-04-15)
 -------------------
 * Make the destructors of the base classes of planning adapters virtual and close move_group gracefully (`#3435 <https://github.com/ros-planning/moveit2/issues/3435>`_) (`#3443 <https://github.com/ros-planning/moveit2/issues/3443>`_)

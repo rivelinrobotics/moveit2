@@ -2,6 +2,10 @@
 Changelog for package moveit_ros_control_interface
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+2.12.4 (2026-02-10)
+-------------------
+Bump version number for compatibility with binary packages
+
 2.12.3 (2025-04-15)
 -------------------
 * ROS Parameter for service call timeout for ros_control controllers (`#3419 <https://github.com/ros-planning/moveit2/issues/3419>`_) (`#3433 <https://github.com/ros-planning/moveit2/issues/3433>`_)
