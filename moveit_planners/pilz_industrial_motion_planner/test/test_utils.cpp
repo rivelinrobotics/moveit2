@@ -1052,8 +1052,7 @@ bool testutils::getBlendTestData(const rclcpp::Node::SharedPtr& node, const size
 bool testutils::generateTrajFromBlendTestData(
     const planning_scene::PlanningSceneConstPtr& scene,
     const std::shared_ptr<pilz_industrial_motion_planner::TrajectoryGenerator>& tg, const std::string& group_name,
-    const std::string& link_name, const testutils::BlendTestData& data, double sampling_time_1, double sampling_time_2,
-    planning_interface::MotionPlanResponse& res_1, planning_interface::MotionPlanResponse& res_2, double& dis_1,
+    const std::string& link_name, const testutils::BlendTestData& data, planning_interface::MotionPlanResponse& res_1, planning_interface::MotionPlanResponse& res_2, double& dis_1,
     double& dis_2)
 {
   const moveit::core::RobotModelConstPtr robot_model = scene->getRobotModel();
@@ -1076,7 +1075,7 @@ bool testutils::generateTrajFromBlendTestData(
       goal_state_1, goal_state_1.getRobotModel()->getJointModelGroup(group_name)));
 
   // trajectory generation
-  tg->generate(scene, req_1, res_1, sampling_time_1);
+  tg->generate(scene, req_1, res_1);
   if (res_1.error_code.val != moveit_msgs::msg::MoveItErrorCodes::SUCCESS)
   {
     std::cout << "Failed to generate first trajectory." << '\n';
@@ -1097,7 +1096,7 @@ bool testutils::generateTrajFromBlendTestData(
   req_2.goal_constraints.push_back(kinematic_constraints::constructGoalConstraints(
       goal_state_2, goal_state_2.getRobotModel()->getJointModelGroup(group_name)));
   // trajectory generation
-  tg->generate(scene, req_2, res_2, sampling_time_2);
+  tg->generate(scene, req_2, res_2);
   if (res_2.error_code.val != moveit_msgs::msg::MoveItErrorCodes::SUCCESS)
   {
     std::cout << "Failed to generate second trajectory." << '\n';

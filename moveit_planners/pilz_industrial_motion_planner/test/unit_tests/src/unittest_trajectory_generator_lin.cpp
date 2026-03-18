@@ -120,6 +120,7 @@ protected:
             node_, PARAM_NAMESPACE_LIMITS, robot_model_->getActiveJointModels());
 
     cartesian_limits::Params cart_limits;
+    cart_limits.sampling_time = 0.1;
     cart_limits.max_rot_vel = 0.5 * M_PI;
     cart_limits.max_trans_acc = 2;
     cart_limits.max_trans_dec = 2;

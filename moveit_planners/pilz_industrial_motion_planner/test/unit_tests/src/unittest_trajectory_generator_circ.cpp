@@ -110,6 +110,7 @@ protected:
     // Cartesian limits are chose as such values to ease the manually compute the
     // trajectory
     cartesian_limits::Params cartesian_limit;
+    cartesian_limit.sampling_time = 0.1;
     cartesian_limit.max_trans_vel = 1.0 * M_PI;
     cartesian_limit.max_trans_acc = 1.0 * M_PI;
     cartesian_limit.max_trans_dec = 1.0 * M_PI;

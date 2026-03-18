@@ -243,6 +243,7 @@ const std::vector<std::string> PARAMETER_NAME_LIST = {
   "robot_description_kinematics.panda_arm_hand.kinematics_solver",
   "robot_description_kinematics.panda_arm_hand.kinematics_solver_search_resolution",
   "robot_description_kinematics.panda_arm_hand.kinematics_solver_timeout",
+  "robot_description_planning.cartesian_limits.sampling_time",
   "robot_description_planning.cartesian_limits.max_rot_vel",
   "robot_description_planning.cartesian_limits.max_trans_acc",
   "robot_description_planning.cartesian_limits.max_trans_dec",

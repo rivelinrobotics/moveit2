@@ -1,4 +1,9 @@
 cartesian_limits:
+  sampling_time: {
+    type: double,
+    description: "Sampling time for the trajectory",
+    default_value: 0.1
+  }
   max_trans_vel: {
     type: double,
     description: "Max translation velocity",
