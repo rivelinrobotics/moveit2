@@ -93,6 +93,14 @@ RobotTrajCont CommandListManager::solve(const planning_scene::PlanningSceneConst
     return RobotTrajCont();
   }
 
+  params_ = param_listener_->get_params();
+  pilz_industrial_motion_planner::LimitsContainer limits;
+  limits.setJointLimits(aggregated_limit_active_joints);
+  limits.setCartesianLimits(params_);
+  plan_comp_builder_.setModel(model);
+  plan_comp_builder_.setBlender(std::unique_ptr<pilz_industrial_motion_planner::TrajectoryBlender>(
+      new pilz_industrial_motion_planner::TrajectoryBlenderTransitionWindow(limits)));
+  
   checkForNegativeRadii(req_list);
   checkLastBlendRadiusZero(req_list);
   checkStartStates(req_list);
