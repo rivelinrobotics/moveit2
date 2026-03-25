@@ -221,6 +221,10 @@ private:
   //! trajectories.
   PlanComponentsBuilder plan_comp_builder_;
 
+  /// aggregated limits of the active joints
+  pilz_industrial_motion_planner::JointLimitsContainer aggregated_limit_active_joints_;
+
+  /// cartesian limit
   std::shared_ptr<cartesian_limits::ParamListener> param_listener_;
   cartesian_limits::Params params_;
 };

@@ -68,7 +68,7 @@ CommandListManager::CommandListManager(const rclcpp::Node::SharedPtr& node,
   // Obtain the aggregated joint limits
   pilz_industrial_motion_planner::JointLimitsContainer aggregated_limit_active_joints;
 
-  aggregated_limit_active_joints = pilz_industrial_motion_planner::JointLimitsAggregator::getAggregatedLimits(
+  aggregated_limit_active_joints_ = pilz_industrial_motion_planner::JointLimitsAggregator::getAggregatedLimits(
       node_, PARAM_NAMESPACE_LIMITS, model_->getActiveJointModels());
 
   param_listener_ =
@@ -76,10 +76,10 @@ CommandListManager::CommandListManager(const rclcpp::Node::SharedPtr& node,
   params_ = param_listener_->get_params();
 
   pilz_industrial_motion_planner::LimitsContainer limits;
-  limits.setJointLimits(aggregated_limit_active_joints);
+  limits.setJointLimits(aggregated_limit_active_joints_);
   limits.setCartesianLimits(params_);
 
-  plan_comp_builder_.setModel(model);
+  plan_comp_builder_.setModel(model_);
   plan_comp_builder_.setBlender(std::unique_ptr<pilz_industrial_motion_planner::TrajectoryBlender>(
       new pilz_industrial_motion_planner::TrajectoryBlenderTransitionWindow(limits)));
 }
@@ -93,14 +93,17 @@ RobotTrajCont CommandListManager::solve(const planning_scene::PlanningSceneConst
     return RobotTrajCont();
   }
 
+  // Reload parameters to ensure they are up to date (mostly for dynamic sampling time)
   params_ = param_listener_->get_params();
   pilz_industrial_motion_planner::LimitsContainer limits;
-  limits.setJointLimits(aggregated_limit_active_joints);
+  limits.setJointLimits(aggregated_limit_active_joints_);
   limits.setCartesianLimits(params_);
-  plan_comp_builder_.setModel(model);
+  plan_comp_builder_.setModel(model_);
   plan_comp_builder_.setBlender(std::unique_ptr<pilz_industrial_motion_planner::TrajectoryBlender>(
       new pilz_industrial_motion_planner::TrajectoryBlenderTransitionWindow(limits)));
   
+  RCLCPP_INFO_STREAM(getLogger(), "Pilz Sampling Time: " << params_.sampling_time);
+
   checkForNegativeRadii(req_list);
   checkLastBlendRadiusZero(req_list);
   checkStartStates(req_list);

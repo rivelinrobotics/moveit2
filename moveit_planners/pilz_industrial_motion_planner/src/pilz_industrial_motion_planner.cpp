@@ -99,6 +99,14 @@ bool CommandPlanner::initialize(const moveit::core::RobotModelConstPtr& model, c
   {
     RCLCPP_INFO_STREAM(getLogger(), "About to load: " << factory);
     PlanningContextLoaderPtr loader_pointer(planner_context_loader_->createSharedInstance(factory));
+
+    pilz_industrial_motion_planner::LimitsContainer limits;
+    limits.setJointLimits(aggregated_limit_active_joints_);
+    limits.setCartesianLimits(params_);
+
+    loader_pointer->setLimits(limits);
+    loader_pointer->setModel(model_);
+
     registerContextLoader(loader_pointer);
   }
 
@@ -139,12 +147,15 @@ CommandPlanner::getPlanningContext(const planning_scene::PlanningSceneConstPtr& 
 
   planning_interface::PlanningContextPtr planning_context;
 
+  // Reload parameters to ensure they are up to date (mostly for dynamic sampling time)
   params_ = param_listener_->get_params();
   pilz_industrial_motion_planner::LimitsContainer limits;
   limits.setJointLimits(aggregated_limit_active_joints_);
   limits.setCartesianLimits(params_);
   context_loader_map_.at(req.planner_id)->setLimits(limits);
   context_loader_map_.at(req.planner_id)->setModel(model_);
+
+  RCLCPP_INFO_STREAM(getLogger(), "Pilz Sampling Time: " << params_.sampling_time);
 
   if (context_loader_map_.at(req.planner_id)->loadContext(planning_context, req.planner_id, req.group_name))
   {
