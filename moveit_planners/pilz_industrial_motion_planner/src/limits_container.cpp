@@ -55,7 +55,7 @@ bool LimitsContainer::hasJointLimits() const
   return has_joint_limits_;
 }
 
-void LimitsContainer::setJointLimits(JointLimitsContainer& joint_limits)
+void LimitsContainer::setJointLimits(const JointLimitsContainer& joint_limits)
 {
   has_joint_limits_ = true;
   joint_limits_ = joint_limits;

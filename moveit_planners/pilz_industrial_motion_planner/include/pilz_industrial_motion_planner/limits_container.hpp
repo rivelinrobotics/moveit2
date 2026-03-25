@@ -60,7 +60,7 @@ public:
    * @brief Set joint limits
    * @param joint_limits
    */
-  void setJointLimits(JointLimitsContainer& joint_limits);
+  void setJointLimits(const JointLimitsContainer& joint_limits);
 
   /**
    * @brief Obtain the Joint Limits from the container
