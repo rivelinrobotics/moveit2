@@ -99,7 +99,7 @@ public:
   planning_interface::PlanningContextPtr
   getPlanningContext(const planning_scene::PlanningSceneConstPtr& planning_scene,
                      const planning_interface::MotionPlanRequest& req,
-                     moveit_msgs::msg::MoveItErrorCodes& error_code) const override;
+                     moveit_msgs::msg::MoveItErrorCodes& error_code) override;
 
   /**
    * @brief Checks if the request can be handled
