@@ -99,7 +99,7 @@ public:
   planning_interface::PlanningContextPtr
   getPlanningContext(const planning_scene::PlanningSceneConstPtr& planning_scene,
                      const planning_interface::MotionPlanRequest& req,
-                     moveit_msgs::msg::MoveItErrorCodes& error_code) override;
+                     moveit_msgs::msg::MoveItErrorCodes& error_code) const override;
 
   /**
    * @brief Checks if the request can be handled
@@ -135,7 +135,7 @@ private:
 
   /// cartesian limit
   std::shared_ptr<cartesian_limits::ParamListener> param_listener_;
-  cartesian_limits::Params params_;
+  cartesian_limits::Params initial_params_;
 };
 
 MOVEIT_CLASS_FORWARD(CommandPlanner);

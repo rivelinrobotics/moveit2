@@ -226,7 +226,7 @@ private:
 
   /// cartesian limit
   std::shared_ptr<cartesian_limits::ParamListener> param_listener_;
-  cartesian_limits::Params params_;
+  cartesian_limits::Params initial_params_;
 };
 
 inline void CommandListManager::checkLastBlendRadiusZero(const moveit_msgs::msg::MotionSequenceRequest& req_list)
