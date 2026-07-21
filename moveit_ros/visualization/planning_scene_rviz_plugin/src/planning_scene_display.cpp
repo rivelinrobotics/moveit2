@@ -677,8 +677,8 @@ void PlanningSceneDisplay::updateInternal(double wall_dt, double /*ros_dt*/)
 {
   current_scene_time_ += wall_dt;
   if (planning_scene_render_ &&
-      ((current_scene_time_ > scene_display_time_property_->getFloat() && robot_state_needs_render_) ||
-       planning_scene_needs_render_))
+      (current_scene_time_ > scene_display_time_property_->getFloat()) &&
+      (robot_state_needs_render_ || planning_scene_needs_render_))
   {
     renderPlanningScene();
     current_scene_time_ = 0.0f;
