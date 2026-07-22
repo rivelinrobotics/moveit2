@@ -165,6 +165,7 @@ protected:
   void executeMainLoopJobs();
   void sceneMonitorReceivedUpdate(planning_scene_monitor::PlanningSceneMonitor::SceneUpdateType update_type);
   void renderPlanningScene();
+  void updateSceneRobotState();
   void setLinkColor(rviz_default_plugins::robot::Robot* robot, const std::string& link_name, const QColor& color);
   void unsetLinkColor(rviz_default_plugins::robot::Robot* robot, const std::string& link_name);
   void setGroupColor(rviz_default_plugins::robot::Robot* robot, const std::string& group_name, const QColor& color);

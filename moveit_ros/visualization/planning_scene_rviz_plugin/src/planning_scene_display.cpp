@@ -66,6 +66,7 @@ namespace moveit_rviz_plugin
 PlanningSceneDisplay::PlanningSceneDisplay(bool listen_to_planning_scene, bool show_scene_robot)
   : Display()
   , planning_scene_needs_render_(true)
+  , robot_state_needs_render_(false)
   , current_scene_time_(0.0f)
   , logger_(moveit::getLogger("moveit.ros.planning_scene_display"))
 {
@@ -353,6 +354,8 @@ void PlanningSceneDisplay::changedSceneName()
     ps->setName(scene_name_property_->getStdString());
 }
 
+// Full rebuild of the planning-scene world geometry (and robot). Expensive: tears down and
+// recreates all world collision shapes. Should only be called when geometry actually changed.
 void PlanningSceneDisplay::renderPlanningScene()
 {
   QColor color = scene_color_property_->getColor();
@@ -364,23 +367,31 @@ void PlanningSceneDisplay::renderPlanningScene()
   try
   {
     const planning_scene_monitor::LockedPlanningSceneRO& ps = getPlanningSceneRO();
-    if (planning_scene_needs_render_)
-    {
-      planning_scene_render_->renderPlanningScene(
-          ps, env_color, attached_color, static_cast<OctreeVoxelRenderMode>(octree_render_property_->getOptionInt()),
-          static_cast<OctreeVoxelColorMode>(octree_coloring_property_->getOptionInt()),
-          scene_alpha_property_->getFloat());
-    }
-    else
-    {
-      planning_scene_render_->updateRobotPosition(ps);
-    }
+    planning_scene_render_->renderPlanningScene(
+        ps, env_color, attached_color, static_cast<OctreeVoxelRenderMode>(octree_render_property_->getOptionInt()),
+        static_cast<OctreeVoxelColorMode>(octree_coloring_property_->getOptionInt()),
+        scene_alpha_property_->getFloat());
   }
   catch (std::exception& ex)
   {
     RCLCPP_ERROR(logger_, "Caught %s while rendering planning scene", ex.what());
   }
   planning_scene_render_->getGeometryNode()->setVisible(scene_enabled_property_->getBool());
+}
+
+// Cheap update: refresh only the robot pose (pose-only kinematic update, reuses existing Ogre
+// entities). No world geometry rebuild. Geometry visibility is handled by changedSceneEnabled().
+void PlanningSceneDisplay::updateSceneRobotState()
+{
+  try
+  {
+    const planning_scene_monitor::LockedPlanningSceneRO& ps = getPlanningSceneRO();
+    planning_scene_render_->updateRobotPosition(ps);
+  }
+  catch (std::exception& ex)
+  {
+    RCLCPP_ERROR(logger_, "Caught %s while updating robot state", ex.what());
+  }
 }
 
 void PlanningSceneDisplay::changedSceneAlpha()
@@ -608,12 +619,30 @@ void PlanningSceneDisplay::sceneMonitorReceivedUpdate(
 }
 
 void PlanningSceneDisplay::onSceneMonitorReceivedUpdate(
-    planning_scene_monitor::PlanningSceneMonitor::SceneUpdateType /*update_type*/)
+    planning_scene_monitor::PlanningSceneMonitor::SceneUpdateType update_type)
 {
   getPlanningSceneRW()->getCurrentStateNonConst().update();
   QMetaObject::invokeMethod(this, "setSceneName", Qt::QueuedConnection,
                             Q_ARG(QString, QString::fromStdString(getPlanningSceneRO()->getName())));
-  planning_scene_needs_render_ = true;
+
+  // Any update may have moved the robot, so always refresh its pose (cheap, pose-only).
+  robot_state_needs_render_ = true;
+  // Only rebuild world collision geometry when the world actually changed. A pure state/transform
+  // update (UPDATE_STATE / UPDATE_TRANSFORMS) leaves the geometry untouched and takes the cheap path
+  // above. UPDATE_SCENE includes the UPDATE_GEOMETRY bit, so this also catches full-scene updates.
+  const bool geometry_changed =
+      (update_type & planning_scene_monitor::PlanningSceneMonitor::UPDATE_GEOMETRY) != 0;
+  if (geometry_changed)
+    planning_scene_needs_render_ = true;
+
+  // DEBUG(scene-update-gating): throttled to 1 Hz. Confirms the update_type bitmask is decoded and
+  // that a full geometry rebuild is only queued when UPDATE_GEOMETRY (bit 4) is present. If you see
+  // geometry_changed=1 on every robot jog, the gating is not working.
+  if (node_)
+    RCLCPP_INFO_THROTTLE(logger_, *node_->get_clock(), 1000,
+                         "[psd scene-update] type=%d geometry_changed=%d full_render_pending=%d (~<=1 Hz)",
+                         static_cast<int>(update_type), static_cast<int>(geometry_changed),
+                         static_cast<int>(planning_scene_needs_render_));
 }
 
 void PlanningSceneDisplay::setSceneName(const QString& name)
@@ -676,14 +705,36 @@ void PlanningSceneDisplay::update(float wall_dt, float ros_dt)
 void PlanningSceneDisplay::updateInternal(double wall_dt, double /*ros_dt*/)
 {
   current_scene_time_ += wall_dt;
-  if (planning_scene_render_ &&
-      ((current_scene_time_ > scene_display_time_property_->getFloat() && robot_state_needs_render_) ||
-       planning_scene_needs_render_))
+
+  if (!planning_scene_render_)
+    return;
+
+  // Full world rebuild: only when geometry actually changed, and rate-limited so a burst of
+  // geometry updates (e.g. a streaming octomap) coalesces into at most one rebuild per interval
+  // (Scene Display Time property, default 0.01 s = 100 Hz cap). wall_dt is in seconds.
+  if (planning_scene_needs_render_ && current_scene_time_ > scene_display_time_property_->getFloat())
   {
+    // DEBUG(geometry-rebuild): throttled to 1 Hz. This is the expensive full world rebuild. With a
+    // static world it should NOT print while only the robot is moving. Frequent prints here mean
+    // geometry is still being rebuilt too often (check the scene-update log above, and Scene Display
+    // Time coalescing). accumulated dt shown to sanity-check wall_dt is in seconds (~0.033/tick).
+    if (node_)
+      RCLCPP_INFO_THROTTLE(logger_, *node_->get_clock(), 1000,
+                           "[psd render] FULL world geometry rebuild; accumulated scene_dt=%.4fs (~<=1 Hz)",
+                           current_scene_time_);
     renderPlanningScene();
     current_scene_time_ = 0.0f;
+    // A full render also refreshes the robot pose, so any pending robot update is now satisfied.
     robot_state_needs_render_ = false;
     planning_scene_needs_render_ = false;
+    return;
+  }
+
+  // Cheap path: pose-only robot update, every tick, no geometry rebuild.
+  if (robot_state_needs_render_)
+  {
+    updateSceneRobotState();
+    robot_state_needs_render_ = false;
   }
 }
 
