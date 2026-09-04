@@ -41,6 +41,7 @@
 #include <fstream>
 #include <iomanip>
 #include <sstream>
+#include <stdexcept>
 #include <vector>
 
 #include <moveit/utils/logger.hpp>
@@ -196,19 +197,24 @@ void TrajectoryLogger::log(const moveit::core::RobotModelConstPtr& robot_model, 
 
   // A request only carries a pipeline_id when the caller names a pipeline explicitly; callers
   // relying on the default pipeline leave it empty, so fall back to the configured name.
-  std::string subdirectory = group;
   const std::string& pipeline = pipeline_id.empty() ? g_pipeline_name : pipeline_id;
-  if (!pipeline.empty())
-  {
-    subdirectory += "_" + pipeline;
-  }
-  if (!planner_id.empty())
-  {
-    subdirectory += "_" + planner_id;
-  }
-  subdirectory += "_" + timestamp();
 
-  const std::filesystem::path directory = std::filesystem::path(g_directory) / "trajectories" / subdirectory;
+  // Both names are invariants by the time a trajectory exists: planner_id keys the context loader
+  // map, so no generator runs without one, and a pipeline that reached configure() was constructed
+  // with its own parameter namespace. An empty one means the caller is not what we think it is,
+  // which would silently reshape the output tree, so refuse rather than guess.
+  if (pipeline.empty())
+  {
+    throw std::invalid_argument("Cannot log trajectory: the request carries no pipeline_id and the planning "
+                                "pipeline was configured without a parameter namespace");
+  }
+  if (planner_id.empty())
+  {
+    throw std::invalid_argument("Cannot log trajectory: the request carries no planner_id");
+  }
+
+  const std::filesystem::path directory =
+      std::filesystem::path(g_directory) / "trajectories" / pipeline / planner_id / group / timestamp();
 
   try
   {
@@ -219,9 +225,10 @@ void TrajectoryLogger::log(const moveit::core::RobotModelConstPtr& robot_model, 
     writeSeries(directory / "acceleration.csv", csv_header, columns, trajectory,
                 &JointTrajectoryPoint::accelerations);
   }
-  catch (const std::exception& ex)
+  catch (const std::filesystem::filesystem_error& ex)
   {
-    // A debug setting must never fail a plan.
+    // Unlike the checks above, an I/O failure says nothing about the caller. A missing or
+    // unwritable log directory must not fail an otherwise good plan.
     RCLCPP_ERROR_STREAM(getLogger(), "Failed to log trajectory to " << directory.string() << ": " << ex.what());
     return;
   }

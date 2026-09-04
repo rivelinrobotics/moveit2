@@ -46,7 +46,7 @@ namespace pilz_industrial_motion_planner
  * @brief Optional CSV dump of generated trajectories, for offline comparison against other planners.
  *
  * When enabled, every trajectory produced by a generator is written to
- * <directory>/trajectories/<group>_<pipeline_id>_<planner_id>_<YYYYmmdd_HHMMSS>/ as three files,
+ * <directory>/trajectories/<pipeline_id>/<planner_id>/<group>/<YYYYmmdd_HHMMSS>/ as three files,
  * position.csv, velocity.csv and acceleration.csv. Each file holds a "time" column
  * followed by one column per active joint of the group, named <group>_1 ... <group>_N
  * in the group's active joint order.
@@ -68,8 +68,14 @@ public:
   static bool isEnabled();
 
   /**
-   * @brief Write @p trajectory as CSVs. Never throws; failures are reported to the log so that
-   * a broken debug setting cannot fail a plan.
+   * @brief Write @p trajectory as CSVs.
+   *
+   * @throws std::invalid_argument if @p planner_id is empty, or if @p pipeline_id is empty and no
+   * pipeline name was configured. Neither can happen for a request that actually reached a
+   * generator, so an empty one is a bug rather than a condition to paper over.
+   *
+   * Filesystem failures are reported to the log instead, so that an unwritable log directory
+   * cannot fail an otherwise good plan.
    */
   static void log(const moveit::core::RobotModelConstPtr& robot_model, const std::string& group,
                   const std::string& pipeline_id, const std::string& planner_id,
