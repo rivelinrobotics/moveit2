@@ -42,6 +42,7 @@
 
 #include <pilz_industrial_motion_planner/cartesian_limits_parameters.hpp>
 #include <pilz_industrial_motion_planner/joint_limits_aggregator.hpp>
+#include <pilz_industrial_motion_planner/trajectory_logger.hpp>
 
 #include <pluginlib/class_list_macros.hpp>
 
@@ -79,6 +80,9 @@ bool CommandPlanner::initialize(const moveit::core::RobotModelConstPtr& model, c
   param_listener_ =
       std::make_shared<cartesian_limits::ParamListener>(node, PARAM_NAMESPACE_LIMITS + ".cartesian_limits");
   initial_params_ = param_listener_->get_params();
+
+  // Optional CSV dump of generated trajectories, for offline comparison against other planners
+  TrajectoryLogger::configure(node, ns);
 
   // Load the planning context loader
   planner_context_loader_ = std::make_unique<pluginlib::ClassLoader<PlanningContextLoader>>(

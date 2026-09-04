@@ -45,6 +45,7 @@
 #include <moveit/utils/logger.hpp>
 
 #include <pilz_industrial_motion_planner/limits_container.hpp>
+#include <pilz_industrial_motion_planner/trajectory_logger.hpp>
 
 namespace pilz_industrial_motion_planner
 {
@@ -354,6 +355,11 @@ void TrajectoryGenerator::generate(const planning_scene::PlanningSceneConstPtr& 
     res.error_code.val = ex.getErrorCode();
     setFailureResponse(planning_begin, res);
     return;
+  }
+
+  if (TrajectoryLogger::isEnabled())
+  {
+    TrajectoryLogger::log(robot_model_, req.group_name, req.pipeline_id, req.planner_id, joint_trajectory);
   }
 
   setSuccessResponse(plan_info.start_scene->getCurrentState(), req.group_name, joint_trajectory, planning_begin, res);
