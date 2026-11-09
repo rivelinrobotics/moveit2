@@ -50,6 +50,7 @@
 #include <fcl/octree.h>
 #endif
 
+#include <future>
 #include <memory>
 #include <mutex>
 
@@ -429,7 +430,8 @@ bool collisionCallback(fcl::CollisionObjectd* o1, fcl::CollisionObjectd* o2, voi
 struct FCLShapeCache
 {
   using ShapeKey = shapes::ShapeConstWeakPtr;
-  using ShapeMap = std::map<ShapeKey, std::shared_ptr<const fcl::CollisionObjectd>, std::owner_less<ShapeKey>>;
+  using CollisionObjectFuture = std::shared_future<std::shared_ptr<const fcl::CollisionObjectd>>;
+  using ShapeMap = std::map<ShapeKey, CollisionObjectFuture, std::owner_less<ShapeKey>>;
 
   FCLShapeCache()
   {
@@ -454,7 +456,8 @@ struct FCLShapeCache
 
   std::mutex mutex_;
 
-  /** \brief Map of weak pointers to the FCL collision object holding the shape's FCL collision geometry. */
+  /** \brief Map of weak pointers to the (possibly still building) FCL collision object holding the shape's FCL
+   *  collision geometry. */
   ShapeMap map_;
 };
 
@@ -824,17 +827,35 @@ template <typename BV, typename T>
 FCLGeometryConstPtr createCollisionGeometry(const shapes::ShapeConstPtr& shape, const T* data, int shape_index)
 {
   FCLShapeCache& cache = getShapeCache<BV>();
-  std::shared_ptr<const fcl::CollisionObjectd> collision_object;
+  const shapes::ShapeConstWeakPtr key(shape);
+  std::promise<std::shared_ptr<const fcl::CollisionObjectd>> promise;
+  FCLShapeCache::CollisionObjectFuture future;
+  bool build = false;
   {
     std::scoped_lock lock(cache.mutex_);
-    std::shared_ptr<const fcl::CollisionObjectd>& cached = cache.map_[shapes::ShapeConstWeakPtr(shape)];
-    if (!cached)
+    auto [it, inserted] = cache.map_.try_emplace(key);
+    if (inserted)
     {
-      cached = createFCLCollisionObject<BV>(*shape);
+      it->second = promise.get_future().share();
+      build = true;
       cache.cleanExpiredPtrs();
     }
-    collision_object = cached;
+    future = it->second;
   }
+  if (build)
+  {
+    try
+    {
+      promise.set_value(createFCLCollisionObject<BV>(*shape));
+    }
+    catch (...)
+    {
+      promise.set_exception(std::current_exception());
+      std::scoped_lock lock(cache.mutex_);
+      cache.map_.erase(key);
+    }
+  }
+  std::shared_ptr<const fcl::CollisionObjectd> collision_object = future.get();
   if (!collision_object)
     return FCLGeometryConstPtr();
   return std::make_shared<const FCLGeometry>(std::move(collision_object), data, shape_index);

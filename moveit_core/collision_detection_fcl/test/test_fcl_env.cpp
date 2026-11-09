@@ -343,6 +343,29 @@ TEST_F(CollisionDetectionEnvTest, AttachedMeshGeometrySharedAcrossThreads)
             other_thread_geometry->collision_object_->collisionGeometry());
 }
 
+TEST_F(CollisionDetectionEnvTest, ConcurrentFirstUseBuildsOneGeometry)
+{
+  constexpr std::size_t THREAD_COUNT = 8;
+  shapes::ShapeConstPtr mesh(shapes::createMeshFromShape(shapes::Sphere(0.1)));
+  moveit::core::AttachedBody body(robot_model_->getLinkModel("panda_hand"), "part", Eigen::Isometry3d::Identity(),
+                                  { mesh }, { Eigen::Isometry3d::Identity() }, {},
+                                  trajectory_msgs::msg::JointTrajectory());
+
+  std::vector<collision_detection::FCLGeometryConstPtr> geometries(THREAD_COUNT);
+  std::vector<std::thread> threads;
+  for (std::size_t i = 0; i < THREAD_COUNT; ++i)
+  {
+    threads.emplace_back([&, i] { geometries[i] = collision_detection::createCollisionGeometry(mesh, &body, 0); });
+  }
+  for (std::thread& thread : threads)
+    thread.join();
+
+  std::set<const fcl::CollisionGeometryd*> distinct_geometries;
+  for (const collision_detection::FCLGeometryConstPtr& geometry : geometries)
+    distinct_geometries.insert(geometry->collision_object_->collisionGeometry().get());
+  EXPECT_EQ(distinct_geometries.size(), 1u);
+}
+
 TEST_F(CollisionDetectionEnvTest, ContactOwnersWithShapeBeforeMesh)
 {
   shapes::ShapeConstPtr box(new shapes::Box(0.1, 0.1, 0.1));
