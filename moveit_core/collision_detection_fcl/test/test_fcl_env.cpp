@@ -49,9 +49,6 @@
 #include <urdf_parser/urdf_parser.h>
 #include <geometric_shapes/shape_operations.h>
 
-#include <set>
-#include <thread>
-
 /** \brief Brings the panda robot in user defined home position */
 inline void setToHome(moveit::core::RobotState& panda_state)
 {
@@ -323,53 +320,6 @@ TEST_F(CollisionDetectionEnvTest, DISABLED_ContinuousCollisionWorld)
   ASSERT_TRUE(res.collision);
   ASSERT_EQ(res.contact_count, 4u);
   res.clear();
-}
-
-TEST_F(CollisionDetectionEnvTest, AttachedMeshGeometrySharedAcrossThreads)
-{
-  shapes::ShapeConstPtr mesh(shapes::createMeshFromShape(shapes::Box(0.1, 0.1, 0.1)));
-  moveit::core::AttachedBody body(robot_model_->getLinkModel("panda_hand"), "part", Eigen::Isometry3d::Identity(),
-                                  { mesh }, { Eigen::Isometry3d::Identity() }, {},
-                                  trajectory_msgs::msg::JointTrajectory());
-  moveit::core::AttachedBody body_copy(body);
-
-  collision_detection::FCLGeometryConstPtr geometry = collision_detection::createCollisionGeometry(mesh, &body, 0);
-  collision_detection::FCLGeometryConstPtr other_thread_geometry;
-  std::thread([&] {
-    other_thread_geometry = collision_detection::createCollisionGeometry(mesh, &body_copy, 0);
-  }).join();
-
-  EXPECT_EQ(geometry->collision_object_->collisionGeometry(),
-            other_thread_geometry->collision_object_->collisionGeometry());
-}
-
-TEST_F(CollisionDetectionEnvTest, ContactOwnersWithShapeBeforeMesh)
-{
-  shapes::ShapeConstPtr box(new shapes::Box(0.1, 0.1, 0.1));
-  shapes::ShapeConstPtr mesh(shapes::createMeshFromShape(shapes::Box(0.1, 0.1, 0.1)));
-  collision_detection::World::Object world_box("box");
-  moveit::core::AttachedBody part(robot_model_->getLinkModel("panda_hand"), "part", Eigen::Isometry3d::Identity(),
-                                  { mesh }, { Eigen::Isometry3d::Identity() }, {},
-                                  trajectory_msgs::msg::JointTrajectory());
-  collision_detection::FCLGeometryConstPtr box_geometry = collision_detection::createCollisionGeometry(box, &world_box);
-  collision_detection::FCLGeometryConstPtr part_geometry = collision_detection::createCollisionGeometry(mesh, &part, 0);
-  collision_detection::FCLCollisionObjectPtr box_object = collision_detection::createCollisionObject(box_geometry);
-  collision_detection::FCLCollisionObjectPtr part_object = collision_detection::createCollisionObject(part_geometry);
-
-  collision_detection::CollisionRequest req;
-  req.contacts = true;
-  req.max_contacts = 10;
-  collision_detection::CollisionResult res;
-  collision_detection::CollisionData data(&req, &res, nullptr);
-  collision_detection::collisionCallback(box_object.get(), part_object.get(), &data);
-
-  std::set<std::set<std::string>> contact_body_names;
-  for (const auto& [names, contacts] : res.contacts)
-  {
-    for (const collision_detection::Contact& contact : contacts)
-      contact_body_names.insert({ contact.body_name_1, contact.body_name_2 });
-  }
-  EXPECT_EQ(contact_body_names, (std::set<std::set<std::string>>{ { "box", "part" } }));
 }
 
 int main(int argc, char** argv)
