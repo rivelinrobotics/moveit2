@@ -35,6 +35,7 @@
 /* Author: Ioan Sucan, Jia Pan */
 
 #include <moveit/collision_detection_fcl/collision_common.hpp>
+#include <moveit/collision_detection_fcl/fcl_shape_cache.hpp>
 #include <geometric_shapes/shapes.h>
 #include <moveit/collision_detection_fcl/fcl_compat.hpp>
 #include <rclcpp/logger.hpp>
@@ -50,9 +51,7 @@
 #include <fcl/octree.h>
 #endif
 
-#include <future>
 #include <memory>
-#include <mutex>
 
 namespace collision_detection
 {
@@ -424,43 +423,6 @@ bool collisionCallback(fcl::CollisionObjectd* o1, fcl::CollisionObjectd* o2, voi
   return cdata->done_;
 }
 
-/** \brief Cache for an arbitrary type of shape. It is assigned during the execution of \e createCollisionGeometry().
- *
- *  Only a single cache per process and bounding volume type is created as it is a quasi-singleton instance. */
-struct FCLShapeCache
-{
-  using ShapeKey = shapes::ShapeConstWeakPtr;
-  using CollisionObjectFuture = std::shared_future<std::shared_ptr<const fcl::CollisionObjectd>>;
-  using ShapeMap = std::map<ShapeKey, CollisionObjectFuture, std::owner_less<ShapeKey>>;
-
-  FCLShapeCache()
-  {
-  }
-
-  void cleanExpiredPtrs()
-  {
-    // clean-up for cache (we don't want to keep infinitely large number of weak ptrs stored)
-    for (auto it = map_.begin(); it != map_.end();)
-    {
-      auto nit = it;
-      ++nit;
-      if (it->first.expired())
-        map_.erase(it);
-      it = nit;
-    }
-    //      RCLCPP_DEBUG(getLogger(), "Cleaning up cache for FCL objects that correspond to static
-    //      shapes. Cache size
-    //      reduced from %u
-    //      to %u", from, static_cast<unsigned int>(map_.size()));
-  }
-
-  std::mutex mutex_;
-
-  /** \brief Map of weak pointers to the (possibly still building) FCL collision object holding the shape's FCL
-   *  collision geometry. */
-  ShapeMap map_;
-};
-
 bool distanceCallback(fcl::CollisionObjectd* o1, fcl::CollisionObjectd* o2, void* data, double& /*min_dist*/)
 {
   DistanceData* cdata = reinterpret_cast<DistanceData*>(data);
@@ -731,16 +693,6 @@ bool distanceCallback(fcl::CollisionObjectd* o1, fcl::CollisionObjectd* o2, void
   return cdata->done;
 }
 
-/* Templated function to get a different cache for each of the template arguments combinations.
- *
- * The returned cache is a quasi-singleton shared by all threads. */
-template <typename BV>
-FCLShapeCache& getShapeCache()
-{
-  static FCLShapeCache cache;
-  return cache;
-}
-
 template <typename BV>
 std::shared_ptr<const fcl::CollisionObjectd> createFCLCollisionObject(const shapes::Shape& shape)
 {
@@ -819,6 +771,16 @@ std::shared_ptr<const fcl::CollisionObjectd> createFCLCollisionObject(const shap
   return std::make_shared<const fcl::CollisionObjectd>(std::shared_ptr<fcl::CollisionGeometryd>(cg_g));
 }
 
+/* Templated function to get a different cache for each of the template arguments combinations.
+ *
+ * The returned cache is a quasi-singleton shared by all threads. */
+template <typename BV>
+FCLShapeCache& getShapeCache()
+{
+  static FCLShapeCache cache(createFCLCollisionObject<BV>);
+  return cache;
+}
+
 /** \brief Templated helper function creating new collision geometry out of general object using an arbitrary bounding
  *  volume (BV).
  *
@@ -826,36 +788,7 @@ std::shared_ptr<const fcl::CollisionObjectd> createFCLCollisionObject(const shap
 template <typename BV, typename T>
 FCLGeometryConstPtr createCollisionGeometry(const shapes::ShapeConstPtr& shape, const T* data, int shape_index)
 {
-  FCLShapeCache& cache = getShapeCache<BV>();
-  const shapes::ShapeConstWeakPtr key(shape);
-  std::promise<std::shared_ptr<const fcl::CollisionObjectd>> promise;
-  FCLShapeCache::CollisionObjectFuture future;
-  bool build = false;
-  {
-    std::scoped_lock lock(cache.mutex_);
-    auto [it, inserted] = cache.map_.try_emplace(key);
-    if (inserted)
-    {
-      it->second = promise.get_future().share();
-      build = true;
-      cache.cleanExpiredPtrs();
-    }
-    future = it->second;
-  }
-  if (build)
-  {
-    try
-    {
-      promise.set_value(createFCLCollisionObject<BV>(*shape));
-    }
-    catch (...)
-    {
-      promise.set_exception(std::current_exception());
-      std::scoped_lock lock(cache.mutex_);
-      cache.map_.erase(key);
-    }
-  }
-  std::shared_ptr<const fcl::CollisionObjectd> collision_object = future.get();
+  std::shared_ptr<const fcl::CollisionObjectd> collision_object = getShapeCache<BV>().get(shape);
   if (!collision_object)
     return FCLGeometryConstPtr();
   return std::make_shared<const FCLGeometry>(std::move(collision_object), data, shape_index);
@@ -917,9 +850,7 @@ FCLGeometryConstPtr createCollisionGeometry(const shapes::ShapeConstPtr& shape, 
 
 void cleanCollisionGeometryCache()
 {
-  FCLShapeCache& cache = getShapeCache<fcl::OBBRSSd>();
-  std::scoped_lock lock(cache.mutex_);
-  cache.cleanExpiredPtrs();
+  getShapeCache<fcl::OBBRSSd>().cleanExpired();
 }
 
 FCLCollisionObjectPtr createCollisionObject(const FCLGeometryConstPtr& geometry, const fcl::Transform3d& transform)
