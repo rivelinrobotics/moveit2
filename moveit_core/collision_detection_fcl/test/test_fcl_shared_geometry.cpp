@@ -44,12 +44,47 @@
 #include <limits>
 #include <map>
 #include <memory>
+#include <optional>
+#include <ostream>
 #include <set>
 #include <string>
 #include <thread>
 #include <tuple>
 #include <utility>
 #include <vector>
+
+namespace
+{
+enum class ShapeKind
+{
+  BOX,
+  MESH
+};
+
+shapes::ShapeConstPtr makeShape(ShapeKind kind)
+{
+  if (kind == ShapeKind::MESH)
+    return shapes::ShapeConstPtr(shapes::createMeshFromShape(shapes::Box(0.1, 0.1, 0.1)));
+  return std::make_shared<const shapes::Box>(0.1, 0.1, 0.1);
+}
+
+bool isNear(const fcl::Vector3d& actual, const fcl::Vector3d& expected)
+{
+  return (actual - expected).norm() < 1e-9;
+}
+
+class UnknownShape : public shapes::Shape
+{
+public:
+  shapes::Shape* clone() const override
+  {
+    return new UnknownShape(*this);
+  }
+
+  void scaleAndPadd(double /*scale*/, double /*padd*/) override
+  {
+  }
+};
 
 class SharedGeometryTest : public testing::Test
 {
@@ -91,25 +126,71 @@ protected:
   collision_detection::AllowedCollisionMatrix acm_;
 };
 
-TEST_F(SharedGeometryTest, AttachedMeshGeometrySharedAcrossThreads)
+using BodyOwner = std::pair<std::string, collision_detection::BodyType>;
+
+struct OwnerCase
 {
-  shapes::ShapeConstPtr mesh(shapes::createMeshFromShape(shapes::Box(0.1, 0.1, 0.1)));
+  std::string name;
+  ShapeKind first;
+  std::optional<ShapeKind> second;
+};
+
+void PrintTo(const OwnerCase& owner_case, std::ostream* os)
+{
+  *os << owner_case.name;
+}
+
+class ContactOwnersTest : public SharedGeometryTest, public testing::WithParamInterface<OwnerCase>
+{
+protected:
+  ContactOwnersTest()
+    : first_shape_(makeShape(GetParam().first))
+    , second_shape_(GetParam().second ? makeShape(*GetParam().second) : first_shape_)
+    , second_(robot_model_->getLinkModel("panda_hand"), "second", Eigen::Isometry3d::Identity(), { second_shape_ },
+              { Eigen::Isometry3d::Identity() }, std::set<std::string>(), trajectory_msgs::msg::JointTrajectory())
+    , first_geometry_(collision_detection::createCollisionGeometry(first_shape_, &first_))
+    , second_geometry_(collision_detection::createCollisionGeometry(second_shape_, &second_, 0))
+  {
+  }
+
+  shapes::ShapeConstPtr first_shape_;
+  shapes::ShapeConstPtr second_shape_;
+  collision_detection::World::Object first_{ "first" };
+  moveit::core::AttachedBody second_;
+  collision_detection::FCLGeometryConstPtr first_geometry_;
+  collision_detection::FCLGeometryConstPtr second_geometry_;
+};
+}  // namespace
+
+/** \brief Creates collision geometry for one mesh as an attached body on this thread, as a copy of that body on
+ *  another thread, and as a world object.
+ *  Checks all three use the same FCL geometry, i.e. the cache is shared across threads and owner types. */
+TEST_F(SharedGeometryTest, MeshGeometrySharedAcrossThreadsAndOwners)
+{
+  shapes::ShapeConstPtr mesh = makeShape(ShapeKind::MESH);
   moveit::core::AttachedBody body(robot_model_->getLinkModel("panda_hand"), "part", Eigen::Isometry3d::Identity(),
-                                  { mesh }, { Eigen::Isometry3d::Identity() }, {},
+                                  { mesh }, { Eigen::Isometry3d::Identity() }, std::set<std::string>(),
                                   trajectory_msgs::msg::JointTrajectory());
   moveit::core::AttachedBody body_copy(body);
+  collision_detection::World::Object world_object("part");
 
   collision_detection::FCLGeometryConstPtr geometry = collision_detection::createCollisionGeometry(mesh, &body, 0);
   collision_detection::FCLGeometryConstPtr other_thread_geometry;
   std::thread([&] { other_thread_geometry = collision_detection::createCollisionGeometry(mesh, &body_copy, 0); }).join();
+  collision_detection::FCLGeometryConstPtr world_geometry =
+      collision_detection::createCollisionGeometry(mesh, &world_object);
 
-  EXPECT_EQ(geometry->collision_object_->collisionGeometry(),
-            other_thread_geometry->collision_object_->collisionGeometry());
+  EXPECT_EQ(other_thread_geometry->collision_object_->collisionGeometry(),
+            geometry->collision_object_->collisionGeometry());
+  EXPECT_EQ(world_geometry->collision_object_->collisionGeometry(), geometry->collision_object_->collisionGeometry());
 }
 
+/** \brief Creates two collision objects from one geometry at different poses, then moves the first.
+ *  Checks both share the geometry and owner data, each keeps its own pose and bounding box, and neither the other
+ *  object nor the geometry's prototype object moves. */
 TEST_F(SharedGeometryTest, CollisionObjectCopiesAreIndependent)
 {
-  shapes::ShapeConstPtr mesh(shapes::createMeshFromShape(shapes::Box(0.1, 0.1, 0.1)));
+  shapes::ShapeConstPtr mesh = makeShape(ShapeKind::MESH);
   collision_detection::World::Object owner("part");
   collision_detection::FCLGeometryConstPtr geometry = collision_detection::createCollisionGeometry(mesh, &owner);
   fcl::Transform3d a_pose = fcl::Transform3d::Identity();
@@ -121,8 +202,8 @@ TEST_F(SharedGeometryTest, CollisionObjectCopiesAreIndependent)
 
   collision_detection::FCLCollisionObjectPtr a = collision_detection::createCollisionObject(geometry, a_pose);
   collision_detection::FCLCollisionObjectPtr b = collision_detection::createCollisionObject(geometry, b_pose);
-  EXPECT_LT((a->getTranslation() - a_pose.translation()).norm(), 1e-9);
-  EXPECT_LT((a->getAABB().center() - a_pose.translation()).norm(), 1e-9);
+  EXPECT_TRUE(isNear(a->getTranslation(), a_pose.translation()));
+  EXPECT_TRUE(isNear(a->getAABB().center(), a_pose.translation()));
   a->setTransform(moved_pose);
   a->computeAABB();
 
@@ -130,16 +211,19 @@ TEST_F(SharedGeometryTest, CollisionObjectCopiesAreIndependent)
   EXPECT_EQ(b->collisionGeometry(), geometry->collision_object_->collisionGeometry());
   EXPECT_EQ(a->getUserData(), geometry->collision_geometry_data_.get());
   EXPECT_EQ(b->getUserData(), geometry->collision_geometry_data_.get());
-  EXPECT_LT((a->getAABB().center() - moved_pose.translation()).norm(), 1e-9);
-  EXPECT_LT((b->getTranslation() - b_pose.translation()).norm(), 1e-9);
-  EXPECT_LT((b->getAABB().center() - b_pose.translation()).norm(), 1e-9);
-  EXPECT_LT(geometry->collision_object_->getTranslation().norm(), 1e-9);
-  EXPECT_LT(geometry->collision_object_->getAABB().center().norm(), 1e-9);
+  EXPECT_TRUE(isNear(a->getAABB().center(), moved_pose.translation()));
+  EXPECT_TRUE(isNear(b->getTranslation(), b_pose.translation()));
+  EXPECT_TRUE(isNear(b->getAABB().center(), b_pose.translation()));
+  EXPECT_TRUE(isNear(geometry->collision_object_->getTranslation(), fcl::Vector3d::Zero()));
+  EXPECT_TRUE(isNear(geometry->collision_object_->getAABB().center(), fcl::Vector3d::Zero()));
 }
 
+/** \brief Adds a box far from the robot, then sets its pose to far, onto the robot base and far again, checking
+ *  collision at each pose.
+ *  Checks the results are no collision, collision, no collision, i.e. moved objects are checked at their new pose. */
 TEST_F(SharedGeometryTest, MovedWorldObjectCollidesAtNewPose)
 {
-  shapes::ShapeConstPtr box(new shapes::Box(0.1, 0.1, 0.1));
+  shapes::ShapeConstPtr box = makeShape(ShapeKind::BOX);
   Eigen::Isometry3d far_pose = Eigen::Isometry3d::Identity();
   far_pose.translation().x() = 2.0;
   Eigen::Isometry3d robot_pose = Eigen::Isometry3d::Identity();
@@ -159,9 +243,12 @@ TEST_F(SharedGeometryTest, MovedWorldObjectCollidesAtNewPose)
   EXPECT_EQ(collisions, (std::vector<bool>{ false, true, false }));
 }
 
+/** \brief Places one mesh against the robot as a world object, then attaches the same mesh to the hand at the same
+ *  place, then detaches it back to the world, checking contacts each time.
+ *  Checks the mesh is reported as a world object, then an attached body, then a world object again. */
 TEST_F(SharedGeometryTest, ReattachedShapeKeepsCorrectOwnerType)
 {
-  shapes::ShapeConstPtr mesh(shapes::createMeshFromShape(shapes::Box(0.1, 0.1, 0.1)));
+  shapes::ShapeConstPtr mesh = makeShape(ShapeKind::MESH);
   Eigen::Isometry3d pose = Eigen::Isometry3d::Identity();
   pose.translation().z() = 0.3;
   const Eigen::Isometry3d pose_in_hand = robot_state_.getGlobalLinkTransform("panda_hand").inverse() * pose;
@@ -209,19 +296,8 @@ TEST_F(SharedGeometryTest, ReattachedShapeKeepsCorrectOwnerType)
                                                                    { collision_detection::BodyTypes::WORLD_OBJECT } }));
 }
 
-class UnknownShape : public shapes::Shape
-{
-public:
-  shapes::Shape* clone() const override
-  {
-    return new UnknownShape(*this);
-  }
-
-  void scaleAndPadd(double /*scale*/, double /*padd*/) override
-  {
-  }
-};
-
+/** \brief Adds a world object at the robot base made of a shape type FCL does not support, then checks collision.
+ *  Checks no geometry is created for the shape, and the check runs without crashing and reports no collision. */
 TEST_F(SharedGeometryTest, UnsupportedShapeIsSkipped)
 {
   shapes::ShapeConstPtr shape = std::make_shared<const UnknownShape>();
@@ -238,11 +314,14 @@ TEST_F(SharedGeometryTest, UnsupportedShapeIsSkipped)
   EXPECT_FALSE(res.collision);
 }
 
+/** \brief Attaches two bodies to the hand and adds an obstacle overlapping one of them, all using the same mesh.
+ *  Records the contacts and minimum distance on one thread, then repeats both queries 50 times on each of 8 threads.
+ *  Checks every threaded result matches the single-threaded one. */
 TEST_F(SharedGeometryTest, ConcurrentChecksOnSharedGeometry)
 {
   constexpr std::size_t THREAD_COUNT = 8;
   constexpr std::size_t ITERATIONS = 50;
-  shapes::ShapeConstPtr mesh(shapes::createMeshFromShape(shapes::Box(0.1, 0.1, 0.1)));
+  shapes::ShapeConstPtr mesh = makeShape(ShapeKind::MESH);
   const std::set<std::string> touch_links{ "panda_hand", "panda_leftfinger", "panda_rightfinger" };
   Eigen::Isometry3d in_front = Eigen::Isometry3d::Identity();
   in_front.translation().z() = 0.15;
@@ -298,53 +377,16 @@ TEST_F(SharedGeometryTest, ConcurrentChecksOnSharedGeometry)
   EXPECT_EQ(mismatches, std::vector<std::size_t>(THREAD_COUNT, 0));
 }
 
-using BodyOwner = std::pair<std::string, collision_detection::BodyType>;
-
-enum class ShapeKind
-{
-  BOX,
-  MESH
-};
-
-struct OwnerCase
-{
-  ShapeKind first;
-  ShapeKind second;
-  bool same_shape;
-};
-
-shapes::ShapeConstPtr makeShape(ShapeKind kind)
-{
-  if (kind == ShapeKind::MESH)
-    return shapes::ShapeConstPtr(shapes::createMeshFromShape(shapes::Box(0.1, 0.1, 0.1)));
-  return std::make_shared<const shapes::Box>(0.1, 0.1, 0.1);
-}
-
-class ContactOwnersTest : public SharedGeometryTest, public testing::WithParamInterface<OwnerCase>
-{
-protected:
-  ContactOwnersTest()
-    : first_shape_(makeShape(GetParam().first))
-    , second_shape_(GetParam().same_shape ? first_shape_ : makeShape(GetParam().second))
-    , second_(robot_model_->getLinkModel("panda_hand"), "second", Eigen::Isometry3d::Identity(), { second_shape_ },
-              { Eigen::Isometry3d::Identity() }, std::set<std::string>(), trajectory_msgs::msg::JointTrajectory())
-    , first_geometry_(collision_detection::createCollisionGeometry(first_shape_, &first_))
-    , second_geometry_(collision_detection::createCollisionGeometry(second_shape_, &second_, 0))
-  {
-  }
-
-  shapes::ShapeConstPtr first_shape_;
-  shapes::ShapeConstPtr second_shape_;
-  collision_detection::World::Object first_{ "first" };
-  moveit::core::AttachedBody second_;
-  collision_detection::FCLGeometryConstPtr first_geometry_;
-  collision_detection::FCLGeometryConstPtr second_geometry_;
-};
-
+/** \brief Overlaps a world object "first" with an attached body "second" and collects their contacts, passing the
+ *  objects in both orders, for each shape pairing in OwnerPairs.
+ *  Checks every contact names "first" as the world object and "second" as the attached body, and its normal points
+ *  from body 1 to body 2, i.e. the names are on the sides FCL computed the contact for, even when FCL swaps the
+ *  objects internally. */
 TEST_P(ContactOwnersTest, ContactsNameEachBody)
 {
+  const fcl::Vector3d offset(0.05, 0.03, 0.02);
   fcl::Transform3d second_pose = fcl::Transform3d::Identity();
-  second_pose.translation() = fcl::Vector3d(0.05, 0.03, 0.02);
+  second_pose.translation() = offset;
   collision_detection::FCLCollisionObjectPtr first_object = collision_detection::createCollisionObject(first_geometry_);
   collision_detection::FCLCollisionObjectPtr second_object =
       collision_detection::createCollisionObject(second_geometry_, second_pose);
@@ -352,6 +394,7 @@ TEST_P(ContactOwnersTest, ContactsNameEachBody)
   req.contacts = true;
   req.max_contacts = 10;
   std::set<std::set<BodyOwner>> contact_owners;
+  std::size_t reversed_normals = 0;
 
   for (const auto& [o1, o2] : { std::make_pair(first_object.get(), second_object.get()),
                                 std::make_pair(second_object.get(), first_object.get()) })
@@ -362,21 +405,26 @@ TEST_P(ContactOwnersTest, ContactsNameEachBody)
     for (const auto& [names, contacts] : res.contacts)
     {
       for (const collision_detection::Contact& contact : contacts)
+      {
         contact_owners.insert(
             { { contact.body_name_1, contact.body_type_1 }, { contact.body_name_2, contact.body_type_2 } });
+        const fcl::Vector3d body_1_to_body_2 = contact.body_name_1 == "first" ? offset : fcl::Vector3d(-offset);
+        if (contact.normal.dot(body_1_to_body_2) <= 0)
+          ++reversed_normals;
+      }
     }
   }
 
-  if (GetParam().same_shape)
-  {
-    EXPECT_EQ(first_geometry_->collision_object_->collisionGeometry(),
-              second_geometry_->collision_object_->collisionGeometry());
-  }
   EXPECT_EQ(contact_owners,
             (std::set<std::set<BodyOwner>>{ { { "first", collision_detection::BodyTypes::WORLD_OBJECT },
                                               { "second", collision_detection::BodyTypes::ROBOT_ATTACHED } } }));
+  EXPECT_EQ(reversed_normals, 0u);
 }
 
+/** \brief Places "second" 0.5 m from "first" and computes their distance, passing the objects in both orders, for
+ *  each shape pairing in OwnerPairs.
+ *  Checks each body's name and type are reported with its own nearest point: "first" on the near side, "second" on
+ *  the far side. */
 TEST_P(ContactOwnersTest, DistanceNamesEachBodyWithItsNearestPoint)
 {
   using NearestPointOwner = std::tuple<std::string, collision_detection::BodyType, bool>;
@@ -407,17 +455,22 @@ TEST_P(ContactOwnersTest, DistanceNamesEachBodyWithItsNearestPoint)
 }
 
 INSTANTIATE_TEST_SUITE_P(OwnerPairs, ContactOwnersTest,
-                         testing::Values(OwnerCase{ ShapeKind::BOX, ShapeKind::MESH, false },
-                                         OwnerCase{ ShapeKind::MESH, ShapeKind::BOX, false },
-                                         OwnerCase{ ShapeKind::BOX, ShapeKind::BOX, false },
-                                         OwnerCase{ ShapeKind::MESH, ShapeKind::MESH, false },
-                                         OwnerCase{ ShapeKind::MESH, ShapeKind::MESH, true }));
+                         testing::Values(OwnerCase{ "BoxMesh", ShapeKind::BOX, ShapeKind::MESH },
+                                         OwnerCase{ "MeshBox", ShapeKind::MESH, ShapeKind::BOX },
+                                         OwnerCase{ "BoxBox", ShapeKind::BOX, ShapeKind::BOX },
+                                         OwnerCase{ "MeshMesh", ShapeKind::MESH, ShapeKind::MESH },
+                                         OwnerCase{ "SharedMesh", ShapeKind::MESH, std::nullopt }),
+                         [](const testing::TestParamInfo<OwnerCase>& info) { return info.param.name; });
 
+/** \brief Puts a box just in front of the hand, pads the hand by 0.08 m, cleans the cache and checks collision, then
+ *  removes the padding, cleans and checks again.
+ *  Checks the padded hand collides and the unpadded hand does not, i.e. padded geometry stays usable after the cache
+ *  drops its temporary entry. */
 TEST_F(SharedGeometryTest, PaddedLinkGeometrySurvivesCacheClean)
 {
   Eigen::Isometry3d pose = Eigen::Isometry3d::Identity();
   pose.translation() = Eigen::Vector3d(0.43, 0.0, 0.55);
-  c_env_->getWorld()->addToObject("box", shapes::ShapeConstPtr(new shapes::Box(0.1, 0.1, 0.1)), pose);
+  c_env_->getWorld()->addToObject("box", makeShape(ShapeKind::BOX), pose);
   std::vector<bool> collisions;
 
   for (double padding : { 0.08, 0.0 })

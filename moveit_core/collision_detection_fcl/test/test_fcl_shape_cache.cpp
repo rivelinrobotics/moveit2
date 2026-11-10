@@ -86,6 +86,8 @@ private:
 };
 }  // namespace
 
+/** \brief Gets the same shape twice.
+ *  Checks the build function runs once and both calls return the same object. */
 TEST(FCLShapeCache, SameShapeBuildsOnce)
 {
   CountingBuild build;
@@ -99,6 +101,8 @@ TEST(FCLShapeCache, SameShapeBuildsOnce)
   EXPECT_EQ(first, second);
 }
 
+/** \brief Gets two different shapes.
+ *  Checks each shape is built separately and gets its own object. */
 TEST(FCLShapeCache, DifferentShapesBuildSeparately)
 {
   CountingBuild build;
@@ -113,6 +117,8 @@ TEST(FCLShapeCache, DifferentShapesBuildSeparately)
   EXPECT_NE(first, second);
 }
 
+/** \brief Gets a shape with a build function that records what it was given.
+ *  Checks the build function is called with exactly the requested shape. */
 TEST(FCLShapeCache, BuildReceivesRequestedShape)
 {
   std::vector<const shapes::Shape*> built_shapes;
@@ -127,6 +133,10 @@ TEST(FCLShapeCache, BuildReceivesRequestedShape)
   EXPECT_EQ(built_shapes, std::vector<const shapes::Shape*>{ shape.get() });
 }
 
+/** \brief Starts one thread getting an uncached shape and holds its build open, starts 7 more threads getting the
+ *  same shape, waits 100 ms so they reach the cache while the build is still open, then lets the build finish.
+ *  Checks the build started, only one build ran and all 8 threads received the same object. The overlap relies on the
+ *  100 ms wait: a thread that starts later only exercises a cache hit. */
 TEST(FCLShapeCache, ConcurrentFirstUseBuildsOnce)
 {
   constexpr std::size_t THREAD_COUNT = 8;
@@ -145,7 +155,7 @@ TEST(FCLShapeCache, ConcurrentFirstUseBuildsOnce)
   std::vector<FCLShapeCache::CollisionObjectConstPtr> objects(THREAD_COUNT);
   std::vector<std::thread> threads;
   threads.emplace_back([&] { objects[0] = cache.get(shape); });
-  build_started.get_future().wait();
+  const std::future_status first_build_status = build_started.get_future().wait_for(std::chrono::seconds(5));
   for (std::size_t i = 1; i < THREAD_COUNT; ++i)
     threads.emplace_back([&, i] { objects[i] = cache.get(shape); });
   std::this_thread::sleep_for(std::chrono::milliseconds(100));
@@ -153,10 +163,14 @@ TEST(FCLShapeCache, ConcurrentFirstUseBuildsOnce)
   for (std::thread& thread : threads)
     thread.join();
 
+  EXPECT_EQ(first_build_status, std::future_status::ready);
   EXPECT_EQ(build_count, 1);
   EXPECT_EQ(std::set<FCLShapeCache::CollisionObjectConstPtr>(objects.begin(), objects.end()).size(), 1u);
 }
 
+/** \brief Holds the build of one shape open, then gets a second shape from another thread.
+ *  Checks the first build started and the second shape is returned within 5 s, i.e. a build in progress does not hold
+ *  the cache lock. */
 TEST(FCLShapeCache, BuildDoesNotBlockOtherShapes)
 {
   shapes::ShapeConstPtr slow_shape = makeShape();
@@ -174,16 +188,19 @@ TEST(FCLShapeCache, BuildDoesNotBlockOtherShapes)
   });
 
   std::thread slow_thread([&] { cache.get(slow_shape); });
-  slow_build_started.get_future().wait();
+  const std::future_status slow_build_status = slow_build_started.get_future().wait_for(std::chrono::seconds(5));
   std::future<FCLShapeCache::CollisionObjectConstPtr> fast =
       std::async(std::launch::async, [&] { return cache.get(fast_shape); });
   std::future_status fast_status = fast.wait_for(std::chrono::seconds(5));
   release_slow_build.set_value();
   slow_thread.join();
 
+  EXPECT_EQ(slow_build_status, std::future_status::ready);
   EXPECT_EQ(fast_status, std::future_status::ready);
 }
 
+/** \brief Gets a shape whose first build throws, then gets it again.
+ *  Checks the first call rethrows the build error and the second call rebuilds and returns an object. */
 TEST(FCLShapeCache, FailedBuildIsRethrownAndNotCached)
 {
   int build_count = 0;
@@ -199,6 +216,8 @@ TEST(FCLShapeCache, FailedBuildIsRethrownAndNotCached)
   EXPECT_EQ(build_count, 2);
 }
 
+/** \brief Gets a shape twice with a build function that returns null, as for an unsupported shape type.
+ *  Checks both calls return null and the build runs only once. */
 TEST(FCLShapeCache, NullBuildResultIsCached)
 {
   int build_count = 0;
@@ -213,6 +232,8 @@ TEST(FCLShapeCache, NullBuildResultIsCached)
   EXPECT_EQ(build_count, 1);
 }
 
+/** \brief Gets a shape, destroys the shape, then cleans the cache.
+ *  Checks the cache still holds the object until the clean, and releases it after. */
 TEST(FCLShapeCache, CleanExpiredReleasesObjectOfExpiredShape)
 {
   CountingBuild build;
@@ -227,6 +248,8 @@ TEST(FCLShapeCache, CleanExpiredReleasesObjectOfExpiredShape)
   EXPECT_TRUE(object.expired());
 }
 
+/** \brief Gets a shape, keeps the shape alive, then cleans the cache.
+ *  Checks the clean does not release the object of a shape that still exists. */
 TEST(FCLShapeCache, CleanExpiredKeepsObjectOfLiveShape)
 {
   CountingBuild build;
@@ -239,6 +262,8 @@ TEST(FCLShapeCache, CleanExpiredKeepsObjectOfLiveShape)
   EXPECT_FALSE(object.expired());
 }
 
+/** \brief Gets a shape, destroys it, then gets a new shape.
+ *  Checks adding the new shape also releases the object of the destroyed one. */
 TEST(FCLShapeCache, InsertReleasesObjectOfExpiredShape)
 {
   CountingBuild build;
@@ -253,13 +278,21 @@ TEST(FCLShapeCache, InsertReleasesObjectOfExpiredShape)
   EXPECT_TRUE(object.expired());
 }
 
-TEST(FCLShapeCache, NewShapeAfterExpiryBuildsAgain)
+/** \brief Gets a shape, destroys it, then creates a new shape at the same address and gets it. Skipped when the
+ *  allocator does not reuse the address, e.g. under AddressSanitizer.
+ *  Checks the new shape is built again and gets a different object, i.e. a new shape is never mistaken for an expired
+ *  one at the same address. */
+TEST(FCLShapeCache, NewShapeAtExpiredShapeAddressBuildsAgain)
 {
   CountingBuild build;
   FCLShapeCache cache(build.function());
   shapes::ShapeConstPtr shape = makeShape();
+  const shapes::Shape* expired_address = shape.get();
   FCLShapeCache::CollisionObjectConstPtr first = cache.get(shape);
+  shape.reset();
   shape = makeShape();
+  if (shape.get() != expired_address)
+    GTEST_SKIP() << "The allocator did not reuse the expired shape's address";
 
   FCLShapeCache::CollisionObjectConstPtr second = cache.get(shape);
 
