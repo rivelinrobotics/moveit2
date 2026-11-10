@@ -104,8 +104,7 @@ CollisionEnvFCL::CollisionEnvFCL(const moveit::core::RobotModelConstPtr& model, 
         // Every time this object is created, g->computeLocalAABB() is called  which is
         // very expensive and should only be calculated once. To update the AABB, use the
         // collObj->setTransform and then call collObj->computeAABB() to transform the AABB.
-        robot_fcl_objs_[index] = FCLCollisionObjectConstPtr(
-            std::make_shared<const fcl::CollisionObjectd>(link_geometry->collision_geometry_));
+        robot_fcl_objs_[index] = createCollisionObject(link_geometry);
       }
       else
         RCLCPP_ERROR(getLogger(), "Unable to construct collision geometry for link '%s'", link->getName().c_str());
@@ -143,7 +142,7 @@ CollisionEnvFCL::CollisionEnvFCL(const moveit::core::RobotModelConstPtr& model, 
         // Every time this object is created, g->computeLocalAABB() is called  which is
         // very expensive and should only be calculated once. To update the AABB, use the
         // collObj->setTransform and then call collObj->computeAABB() to transform the AABB.
-        robot_fcl_objs_[index] = std::make_shared<const fcl::CollisionObjectd>(g->collision_geometry_);
+        robot_fcl_objs_[index] = createCollisionObject(g);
       }
       else
         RCLCPP_ERROR(getLogger(), "Unable to construct collision geometry for link '%s'", link->getName().c_str());
@@ -202,8 +201,7 @@ void CollisionEnvFCL::constructFCLObjectWorld(const World::Object* obj, FCLObjec
     FCLGeometryConstPtr g = createCollisionGeometry(obj->shapes_[i], obj);
     if (g)
     {
-      auto co = new fcl::CollisionObjectd(g->collision_geometry_, transform2fcl(obj->global_shape_poses_[i]));
-      fcl_obj.collision_objects_.push_back(FCLCollisionObjectPtr(co));
+      fcl_obj.collision_objects_.push_back(createCollisionObject(g, transform2fcl(obj->global_shape_poses_[i])));
       fcl_obj.collision_geometry_.push_back(g);
     }
   }
@@ -216,7 +214,7 @@ void CollisionEnvFCL::constructFCLObjectRobot(const moveit::core::RobotState& st
 
   for (std::size_t i{ 0 }; i < robot_geoms_.size(); ++i)
   {
-    if (robot_geoms_[i] && robot_geoms_[i]->collision_geometry_)
+    if (robot_geoms_[i] && robot_geoms_[i]->collision_object_)
     {
       transform2fcl(state.getCollisionBodyTransform(robot_geoms_[i]->collision_geometry_data_->ptr.link,
                                                     robot_geoms_[i]->collision_geometry_data_->shape_index),
@@ -238,11 +236,10 @@ void CollisionEnvFCL::constructFCLObjectRobot(const moveit::core::RobotState& st
     const EigenSTL::vector_Isometry3d& ab_t = body->getGlobalCollisionBodyTransforms();
     for (std::size_t k = 0; k < objs.size(); ++k)
     {
-      if (objs[k]->collision_geometry_)
+      if (objs[k]->collision_object_)
       {
         transform2fcl(ab_t[k], fcl_tf);
-        fcl_obj.collision_objects_.push_back(
-            std::make_shared<fcl::CollisionObjectd>(objs[k]->collision_geometry_, fcl_tf));
+        fcl_obj.collision_objects_.push_back(createCollisionObject(objs[k], fcl_tf));
         // we copy the shared ptr to the CollisionGeometryData, as this is not stored by the class itself,
         // and would be destroyed when objs goes out of scope.
         fcl_obj.collision_geometry_.push_back(objs[k]);
@@ -471,9 +468,6 @@ void CollisionEnvFCL::notifyObjectChange(const ObjectConstPtr& obj, World::Actio
     for (std::size_t i = 0; i < it->second.collision_objects_.size(); ++i)
     {
       it->second.collision_objects_[i]->setTransform(transform2fcl(obj->global_shape_poses_[i]));
-
-      // compute AABB, order matters
-      it->second.collision_geometry_[i]->collision_geometry_->computeLocalAABB();
       it->second.collision_objects_[i]->computeAABB();
     }
 
@@ -506,7 +500,7 @@ void CollisionEnvFCL::updatedPaddingOrScaling(const std::vector<std::string>& li
         {
           index = lmodel->getFirstCollisionBodyTransformIndex() + j;
           robot_geoms_[index] = g;
-          robot_fcl_objs_[index] = std::make_shared<const fcl::CollisionObjectd>(g->collision_geometry_);
+          robot_fcl_objs_[index] = createCollisionObject(g);
         }
       }
     }

@@ -35,6 +35,7 @@
 /* Author: Ioan Sucan, Jia Pan */
 
 #include <moveit/collision_detection_fcl/collision_common.hpp>
+#include <moveit/collision_detection_fcl/fcl_shape_cache.hpp>
 #include <geometric_shapes/shapes.h>
 #include <moveit/collision_detection_fcl/fcl_compat.hpp>
 #include <rclcpp/logger.hpp>
@@ -51,8 +52,6 @@
 #endif
 
 #include <memory>
-#include <type_traits>
-#include <mutex>
 
 namespace collision_detection
 {
@@ -69,8 +68,8 @@ bool collisionCallback(fcl::CollisionObjectd* o1, fcl::CollisionObjectd* o2, voi
   CollisionData* cdata = reinterpret_cast<CollisionData*>(data);
   if (cdata->done_)
     return true;
-  const CollisionGeometryData* cd1 = static_cast<const CollisionGeometryData*>(o1->collisionGeometry()->getUserData());
-  const CollisionGeometryData* cd2 = static_cast<const CollisionGeometryData*>(o2->collisionGeometry()->getUserData());
+  const CollisionGeometryData* cd1 = static_cast<const CollisionGeometryData*>(o1->getUserData());
+  const CollisionGeometryData* cd2 = static_cast<const CollisionGeometryData*>(o2->getUserData());
 
   // do not collision check geoms part of the same object / link / attached body
   if (cd1->sameObject(*cd2))
@@ -242,7 +241,7 @@ bool collisionCallback(fcl::CollisionObjectd* o1, fcl::CollisionObjectd* o2, voi
                                                           std::make_pair(cd2->getID(), cd1->getID());
       for (int i = 0; i < num_contacts; ++i)
       {
-        fcl2contact(col_result.getContact(i), c);
+        fcl2contact(col_result.getContact(i), o1, o2, c);
         // if the contact is  not allowed, we have a collision
         if (!dcf(c))
         {
@@ -333,7 +332,7 @@ bool collisionCallback(fcl::CollisionObjectd* o1, fcl::CollisionObjectd* o2, voi
         for (int i = 0; i < num_contacts; ++i)
         {
           Contact c;
-          fcl2contact(col_result.getContact(i), c);
+          fcl2contact(col_result.getContact(i), o1, o2, c);
           cdata->res_->contacts[pc].push_back(c);
           cdata->res_->contact_count++;
         }
@@ -424,45 +423,12 @@ bool collisionCallback(fcl::CollisionObjectd* o1, fcl::CollisionObjectd* o2, voi
   return cdata->done_;
 }
 
-/** \brief Cache for an arbitrary type of shape. It is assigned during the execution of \e createCollisionGeometry().
- *
- *  Only a single cache per thread and object type is created as it is a quasi-singleton instance. */
-struct FCLShapeCache
-{
-  using ShapeKey = shapes::ShapeConstWeakPtr;
-  using ShapeMap = std::map<ShapeKey, FCLGeometryConstPtr, std::owner_less<ShapeKey>>;
-
-  FCLShapeCache()
-  {
-  }
-
-  void cleanExpiredPtrs()
-  {
-    // clean-up for cache (we don't want to keep infinitely large number of weak ptrs stored)
-    for (auto it = map_.begin(); it != map_.end();)
-    {
-      auto nit = it;
-      ++nit;
-      if (it->first.expired())
-        map_.erase(it);
-      it = nit;
-    }
-    //      RCLCPP_DEBUG(getLogger(), "Cleaning up cache for FCL objects that correspond to static
-    //      shapes. Cache size
-    //      reduced from %u
-    //      to %u", from, static_cast<unsigned int>(map_.size()));
-  }
-
-  /** \brief Map of weak pointers to the FCLGeometry. */
-  ShapeMap map_;
-};
-
 bool distanceCallback(fcl::CollisionObjectd* o1, fcl::CollisionObjectd* o2, void* data, double& /*min_dist*/)
 {
   DistanceData* cdata = reinterpret_cast<DistanceData*>(data);
 
-  const CollisionGeometryData* cd1 = static_cast<const CollisionGeometryData*>(o1->collisionGeometry()->getUserData());
-  const CollisionGeometryData* cd2 = static_cast<const CollisionGeometryData*>(o2->collisionGeometry()->getUserData());
+  const CollisionGeometryData* cd1 = static_cast<const CollisionGeometryData*>(o1->getUserData());
+  const CollisionGeometryData* cd2 = static_cast<const CollisionGeometryData*>(o2->getUserData());
 
   // do not distance check for geoms part of the same object / link / attached body
   if (cd1->sameObject(*cd2))
@@ -603,8 +569,8 @@ bool distanceCallback(fcl::CollisionObjectd* o1, fcl::CollisionObjectd* o2, void
 
     // Careful here: Get the collision geometry data again, since FCL might
     // swap o1 and o2 in the result.
-    const CollisionGeometryData* res_cd1 = static_cast<const CollisionGeometryData*>(fcl_result.o1->getUserData());
-    const CollisionGeometryData* res_cd2 = static_cast<const CollisionGeometryData*>(fcl_result.o2->getUserData());
+    const CollisionGeometryData* res_cd1 = geometryOwner(fcl_result.o1, o1, o2);
+    const CollisionGeometryData* res_cd2 = geometryOwner(fcl_result.o2, o2, o1);
 
 #if (MOVEIT_FCL_VERSION >= FCL_VERSION_CHECK(0, 6, 0))
     dist_result.nearest_points[0] = fcl_result.nearest_points[0];
@@ -727,169 +693,48 @@ bool distanceCallback(fcl::CollisionObjectd* o1, fcl::CollisionObjectd* o2, void
   return cdata->done;
 }
 
-/* Templated function to get a different cache for each of the template arguments combinations.
- *
- * The returned cache is a quasi-singleton for each thread as it is created \e thread_local. */
-template <typename BV, typename T>
-FCLShapeCache& getShapeCache()
+template <typename BV>
+std::shared_ptr<const fcl::CollisionObjectd> createFCLCollisionObject(const shapes::Shape& shape)
 {
-  /* The cache is created thread_local, that is each thread calling
-   * this quasi-singleton function will get its own instance. Once
-   * the thread joins/exits, the cache gets deleted.
-   * Reasoning is that multi-threaded planners (eg OMPL) or user-code
-   * will often need to do collision checks with the same object
-   * simultaneously (especially true for attached objects). Having only
-   * one global cache leads to many cache misses. Also as the cache can
-   * only be accessed by one thread we don't need any locking.
-   */
-  static thread_local FCLShapeCache cache;
-  return cache;
-}
-
-/** \brief Templated helper function creating new collision geometry out of general object using an arbitrary bounding
- *  volume (BV).
- *
- *  It assigns a thread-local cache for each type of shape and minimizes memory usage and copying through utilizing the
- *  cache. */
-template <typename BV, typename T>
-FCLGeometryConstPtr createCollisionGeometry(const shapes::ShapeConstPtr& shape, const T* data, int shape_index)
-{
-  using ShapeKey = shapes::ShapeConstWeakPtr;
-  using ShapeMap = std::map<ShapeKey, FCLGeometryConstPtr, std::owner_less<ShapeKey>>;
-
-  FCLShapeCache& cache = getShapeCache<BV, T>();
-
-  shapes::ShapeConstWeakPtr wptr(shape);
-  {
-    ShapeMap::const_iterator cache_it = cache.map_.find(wptr);
-    if (cache_it != cache.map_.end())
-    {
-      if (cache_it->second->collision_geometry_data_->ptr.raw == data)
-      {
-        //        RCLCPP_DEBUG(getLogger(), "Collision data structures for object %s retrieved from
-        //        cache.",
-        //        cache_it->second->collision_geometry_data_->getID().c_str());
-        return cache_it->second;
-      }
-      else if (cache_it->second.unique())
-      {
-        const_cast<FCLGeometry*>(cache_it->second.get())->updateCollisionGeometryData(data, shape_index, false);
-        //          RCLCPP_DEBUG(getLogger(), "Collision data structures for object %s retrieved from
-        //          cache after updating
-        //          the source
-        //          object.", cache_it->second->collision_geometry_data_->getID().c_str());
-        return cache_it->second;
-      }
-    }
-  }
-
-  // attached objects could have previously been World::Object; we try to move them
-  // from their old cache to the new one, if possible. the code is not pretty, but should help
-  // when we attach/detach objects that are in the world
-  if (std::is_same<T, moveit::core::AttachedBody>::value)
-  {
-    // get the cache that corresponds to objects; maybe this attached object used to be a world object
-    FCLShapeCache& othercache = getShapeCache<BV, World::Object>();
-
-    // attached bodies could be just moved from the environment.
-    auto cache_it = othercache.map_.find(wptr);
-    if (cache_it != othercache.map_.end())
-    {
-      if (cache_it->second.unique())
-      {
-        // remove from old cache
-        FCLGeometryConstPtr obj_cache = cache_it->second;
-        othercache.map_.erase(cache_it);
-        // update the CollisionGeometryData; nobody has a pointer to this, so we can safely modify it
-        const_cast<FCLGeometry*>(obj_cache.get())->updateCollisionGeometryData(data, shape_index, true);
-
-        //        RCLCPP_DEBUG(getLogger(), "Collision data structures for attached body %s retrieved
-        //        from the cache for
-        //        world objects.",
-        //        obj_cache->collision_geometry_data_->getID().c_str());
-
-        // add to the new cache
-        cache.map_[wptr] = obj_cache;
-        cache.cleanExpiredPtrs();
-        return obj_cache;
-      }
-    }
-  }
-  else
-    // world objects could have previously been attached objects; we try to move them
-    // from their old cache to the new one, if possible. the code is not pretty, but should help
-    // when we attach/detach objects that are in the world
-    if (std::is_same<T, World::Object>::value)
-    {
-      // get the cache that corresponds to objects; maybe this attached object used to be a world object
-      FCLShapeCache& othercache = getShapeCache<BV, moveit::core::AttachedBody>();
-
-      // attached bodies could be just moved from the environment.
-      auto cache_it = othercache.map_.find(wptr);
-      if (cache_it != othercache.map_.end())
-      {
-        if (cache_it->second.unique())
-        {
-          // remove from old cache
-          FCLGeometryConstPtr obj_cache = cache_it->second;
-          othercache.map_.erase(cache_it);
-
-          // update the CollisionGeometryData; nobody has a pointer to this, so we can safely modify it
-          const_cast<FCLGeometry*>(obj_cache.get())->updateCollisionGeometryData(data, shape_index, true);
-
-          //          RCLCPP_DEBUG(getLogger(), "Collision data structures for world object %s retrieved
-          //          from the cache for
-          //          attached
-          //          bodies.",
-          //                   obj_cache->collision_geometry_data_->getID().c_str());
-
-          // add to the new cache
-          cache.map_[wptr] = obj_cache;
-          cache.cleanExpiredPtrs();
-          return obj_cache;
-        }
-      }
-    }
-
   fcl::CollisionGeometryd* cg_g = nullptr;
   // handle cases individually
-  switch (shape->type)
+  switch (shape.type)
   {
     case shapes::PLANE:
     {
-      const shapes::Plane* p = static_cast<const shapes::Plane*>(shape.get());
+      const shapes::Plane* p = static_cast<const shapes::Plane*>(&shape);
       cg_g = new fcl::Planed(p->a, p->b, p->c, p->d);
     }
     break;
     case shapes::SPHERE:
     {
-      const shapes::Sphere* s = static_cast<const shapes::Sphere*>(shape.get());
+      const shapes::Sphere* s = static_cast<const shapes::Sphere*>(&shape);
       cg_g = new fcl::Sphered(s->radius);
     }
     break;
     case shapes::BOX:
     {
-      const shapes::Box* s = static_cast<const shapes::Box*>(shape.get());
+      const shapes::Box* s = static_cast<const shapes::Box*>(&shape);
       const double* size = s->size;
       cg_g = new fcl::Boxd(size[0], size[1], size[2]);
     }
     break;
     case shapes::CYLINDER:
     {
-      const shapes::Cylinder* s = static_cast<const shapes::Cylinder*>(shape.get());
+      const shapes::Cylinder* s = static_cast<const shapes::Cylinder*>(&shape);
       cg_g = new fcl::Cylinderd(s->radius, s->length);
     }
     break;
     case shapes::CONE:
     {
-      const shapes::Cone* s = static_cast<const shapes::Cone*>(shape.get());
+      const shapes::Cone* s = static_cast<const shapes::Cone*>(&shape);
       cg_g = new fcl::Coned(s->radius, s->length);
     }
     break;
     case shapes::MESH:
     {
       auto g = new fcl::BVHModel<BV>();
-      const shapes::Mesh* mesh = static_cast<const shapes::Mesh*>(shape.get());
+      const shapes::Mesh* mesh = static_cast<const shapes::Mesh*>(&shape);
       if (mesh->vertex_count > 0 && mesh->triangle_count > 0)
       {
         std::vector<fcl::Triangle> tri_indices(mesh->triangle_count);
@@ -912,24 +757,41 @@ FCLGeometryConstPtr createCollisionGeometry(const shapes::ShapeConstPtr& shape, 
     break;
     case shapes::OCTREE:
     {
-      const shapes::OcTree* g = static_cast<const shapes::OcTree*>(shape.get());
+      const shapes::OcTree* g = static_cast<const shapes::OcTree*>(&shape);
       cg_g = new fcl::OcTreed(g->octree);
     }
     break;
     default:
-      RCLCPP_ERROR(getLogger(), "This shape type (%d) is not supported using FCL yet", static_cast<int>(shape->type));
+      RCLCPP_ERROR(getLogger(), "This shape type (%d) is not supported using FCL yet", static_cast<int>(shape.type));
       cg_g = nullptr;
   }
 
-  if (cg_g)
-  {
-    cg_g->computeLocalAABB();
-    FCLGeometryConstPtr res = std::make_shared<const FCLGeometry>(cg_g, data, shape_index);
-    cache.map_[wptr] = res;
-    cache.cleanExpiredPtrs();
-    return res;
-  }
-  return FCLGeometryConstPtr();
+  if (!cg_g)
+    return nullptr;
+  return std::make_shared<const fcl::CollisionObjectd>(std::shared_ptr<fcl::CollisionGeometryd>(cg_g));
+}
+
+/* Templated function to get a different cache for each of the template arguments combinations.
+ *
+ * The returned cache is a quasi-singleton shared by all threads. */
+template <typename BV>
+FCLShapeCache& getShapeCache()
+{
+  static FCLShapeCache cache(createFCLCollisionObject<BV>);
+  return cache;
+}
+
+/** \brief Templated helper function creating new collision geometry out of general object using an arbitrary bounding
+ *  volume (BV).
+ *
+ *  The FCL collision geometry of each shape is built once and shared by all threads and owners through the cache. */
+template <typename BV, typename T>
+FCLGeometryConstPtr createCollisionGeometry(const shapes::ShapeConstPtr& shape, const T* data, int shape_index)
+{
+  std::shared_ptr<const fcl::CollisionObjectd> collision_object = getShapeCache<BV>().get(shape);
+  if (!collision_object)
+    return FCLGeometryConstPtr();
+  return std::make_shared<const FCLGeometry>(std::move(collision_object), data, shape_index);
 }
 
 FCLGeometryConstPtr createCollisionGeometry(const shapes::ShapeConstPtr& shape, const moveit::core::LinkModel* link,
@@ -988,14 +850,16 @@ FCLGeometryConstPtr createCollisionGeometry(const shapes::ShapeConstPtr& shape, 
 
 void cleanCollisionGeometryCache()
 {
-  FCLShapeCache& cache1 = getShapeCache<fcl::OBBRSSd, World::Object>();
-  {
-    cache1.cleanExpiredPtrs();
-  }
-  FCLShapeCache& cache2 = getShapeCache<fcl::OBBRSSd, moveit::core::AttachedBody>();
-  {
-    cache2.cleanExpiredPtrs();
-  }
+  getShapeCache<fcl::OBBRSSd>().cleanExpired();
+}
+
+FCLCollisionObjectPtr createCollisionObject(const FCLGeometryConstPtr& geometry, const fcl::Transform3d& transform)
+{
+  auto object = std::make_shared<fcl::CollisionObjectd>(*geometry->collision_object_);
+  object->setTransform(transform);
+  object->computeAABB();
+  object->setUserData(geometry->collision_geometry_data_.get());
+  return object;
 }
 
 void CollisionData::enableGroup(const moveit::core::RobotModelConstPtr& robot_model)

@@ -1,4 +1,5 @@
 add_library(moveit_collision_detection_fcl SHARED src/collision_common.cpp
+                                                  src/fcl_shape_cache.cpp
                                                   src/collision_env_fcl.cpp)
 target_include_directories(
   moveit_collision_detection_fcl
@@ -54,6 +55,13 @@ if(BUILD_TESTING)
 
   ament_add_gtest(test_fcl_collision_env test/test_fcl_env.cpp)
   target_link_libraries(test_fcl_collision_env moveit_test_utils
+                        moveit_collision_detection_fcl)
+
+  ament_add_gtest(test_fcl_shape_cache test/test_fcl_shape_cache.cpp)
+  target_link_libraries(test_fcl_shape_cache moveit_collision_detection_fcl)
+
+  ament_add_gtest(test_fcl_shared_geometry test/test_fcl_shared_geometry.cpp)
+  target_link_libraries(test_fcl_shared_geometry moveit_test_utils
                         moveit_collision_detection_fcl)
 
   ament_add_gtest(test_fcl_collision_detection

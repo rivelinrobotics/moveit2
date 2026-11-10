@@ -205,45 +205,30 @@ struct FCLGeometry
   }
 
   /** \brief Constructor for a robot link. */
-  FCLGeometry(fcl::CollisionGeometryd* collision_geometry, const moveit::core::LinkModel* link, int shape_index)
-    : collision_geometry_(collision_geometry)
+  FCLGeometry(std::shared_ptr<const fcl::CollisionObjectd> collision_object, const moveit::core::LinkModel* link,
+              int shape_index)
+    : collision_object_(std::move(collision_object))
     , collision_geometry_data_(std::make_shared<CollisionGeometryData>(link, shape_index))
   {
-    collision_geometry_->setUserData(collision_geometry_data_.get());
   }
 
   /** \brief Constructor for an attached body. */
-  FCLGeometry(fcl::CollisionGeometryd* collision_geometry, const moveit::core::AttachedBody* ab, int shape_index)
-    : collision_geometry_(collision_geometry)
+  FCLGeometry(std::shared_ptr<const fcl::CollisionObjectd> collision_object, const moveit::core::AttachedBody* ab,
+              int shape_index)
+    : collision_object_(std::move(collision_object))
     , collision_geometry_data_(std::make_shared<CollisionGeometryData>(ab, shape_index))
   {
-    collision_geometry_->setUserData(collision_geometry_data_.get());
   }
 
   /** \brief Constructor for a world object. */
-  FCLGeometry(fcl::CollisionGeometryd* collision_geometry, const World::Object* obj, int shape_index)
-    : collision_geometry_(collision_geometry)
+  FCLGeometry(std::shared_ptr<const fcl::CollisionObjectd> collision_object, const World::Object* obj, int shape_index)
+    : collision_object_(std::move(collision_object))
     , collision_geometry_data_(std::make_shared<CollisionGeometryData>(obj, shape_index))
   {
-    collision_geometry_->setUserData(collision_geometry_data_.get());
   }
 
-  /** \brief Updates the \e collision_geometry_data_ with new data while also setting the \e collision_geometry_ to the
-   *   new data. */
-  template <typename T>
-  void updateCollisionGeometryData(const T* data, int shape_index, bool newType)
-  {
-    if (!newType && collision_geometry_data_)
-    {
-      if (collision_geometry_data_->ptr.raw == reinterpret_cast<const void*>(data))
-        return;
-    }
-    collision_geometry_data_ = std::make_shared<CollisionGeometryData>(data, shape_index);
-    collision_geometry_->setUserData(collision_geometry_data_.get());
-  }
-
-  /** \brief Pointer to FCL collision geometry. */
-  std::shared_ptr<fcl::CollisionGeometryd> collision_geometry_;
+  /** \brief FCL collision object at the identity transform, holding the shared FCL collision geometry. */
+  std::shared_ptr<const fcl::CollisionObjectd> collision_object_;
 
   /** \brief Pointer to the user-defined geometry data. */
   CollisionGeometryDataPtr collision_geometry_data_;
@@ -316,7 +301,10 @@ FCLGeometryConstPtr createCollisionGeometry(const shapes::ShapeConstPtr& shape, 
 FCLGeometryConstPtr createCollisionGeometry(const shapes::ShapeConstPtr& shape, double scale, double padding,
                                             const World::Object* obj);
 
-/** \brief Increases the counter of the caches which can trigger the cleaning of expired entries from them. */
+FCLCollisionObjectPtr createCollisionObject(const FCLGeometryConstPtr& geometry,
+                                            const fcl::Transform3d& transform = fcl::Transform3d::Identity());
+
+/** \brief Cleans expired entries from the cache. */
 void cleanCollisionGeometryCache();
 
 /** \brief Transforms an Eigen Isometry3d to FCL coordinate transformation */
@@ -340,16 +328,24 @@ inline fcl::Transform3d transform2fcl(const Eigen::Isometry3d& b)
   return t;
 }
 
-/** \brief Transforms an FCL contact into a MoveIt contact point. */
-inline void fcl2contact(const fcl::Contactd& fc, Contact& c)
+inline const CollisionGeometryData* geometryOwner(const fcl::CollisionGeometryd* geometry,
+                                                  const fcl::CollisionObjectd* o1, const fcl::CollisionObjectd* o2)
+{
+  const fcl::CollisionObjectd* owner = geometry == o1->collisionGeometry().get() ? o1 : o2;
+  return static_cast<const CollisionGeometryData*>(owner->getUserData());
+}
+
+/** \brief Transforms an FCL contact between \e o1 and \e o2 into a MoveIt contact point. */
+inline void fcl2contact(const fcl::Contactd& fc, const fcl::CollisionObjectd* o1, const fcl::CollisionObjectd* o2,
+                        Contact& c)
 {
   c.pos = Eigen::Vector3d(fc.pos[0], fc.pos[1], fc.pos[2]);
   c.normal = Eigen::Vector3d(fc.normal[0], fc.normal[1], fc.normal[2]);
   c.depth = fc.penetration_depth;
-  const CollisionGeometryData* cgd1 = static_cast<const CollisionGeometryData*>(fc.o1->getUserData());
+  const CollisionGeometryData* cgd1 = geometryOwner(fc.o1, o1, o2);
   c.body_name_1 = cgd1->getID();
   c.body_type_1 = cgd1->type;
-  const CollisionGeometryData* cgd2 = static_cast<const CollisionGeometryData*>(fc.o2->getUserData());
+  const CollisionGeometryData* cgd2 = geometryOwner(fc.o2, o2, o1);
   c.body_name_2 = cgd2->getID();
   c.body_type_2 = cgd2->type;
 }
